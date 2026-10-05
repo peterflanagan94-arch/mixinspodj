@@ -38,11 +38,13 @@ Short version:
 | M7 | Play tracking, already-played detection | Not started |
 | M8 | Local backups, crash recovery, QA pass, tag v0.1 | Not started |
 
-¹ Manual select (search → pick) is fully verified live. Drag-in is
-implemented correctly per the web drag-and-drop standard and a real CSS
-bug it surfaced is fixed, but the actual drop was never confirmed
-succeeding under automation — see the M4 section below before trusting
-it works.
+¹ Manual select (search → pick) is fully verified live. Drag-in initially
+looked unverifiable, then genuinely didn't work for the user either —
+real bug, not an automation artifact: Tauri's `dragDropEnabled` (on by
+default) was intercepting drag gestures at the window level before the
+webview ever saw them. Fixed (`dragDropEnabled: false` on both windows)
+and confirmed working post-fix, with some residual flakiness under
+synthetic automation — see the M4 section below.
 
 Explicitly postponed past 0.1: GET MUSIC acquisition providers, PREP/event
 module, Transition Finder, Crowd Mode, DJ-software integrations,
@@ -333,9 +335,26 @@ not a React one, so cross-window isn't extra work once in-window works.
   documented limitation of UI automation generally). The click-based
   fallback paths all kept working correctly throughout every attempt,
   which at least rules out the drag code having broken anything else.
-- **This needs a human with a real mouse or trackpad to confirm before
-  it's trusted as working.** Flagging this explicitly rather than
-  claiming verification I don't actually have.
+- **Update, same day**: the user tried it with a real mouse — still
+  nothing happened. So this wasn't an automation artifact after all; it
+  was a real bug. Root cause: Tauri intercepts drag gestures at the
+  native window level by default (`dragDropEnabled`, true unless set
+  otherwise) to support OS-level file drops onto the window — and that
+  interception prevents the webview's own HTML5 drag-and-drop from ever
+  firing, full stop, for anyone, automated or not. Fixed by setting
+  `"dragDropEnabled": false` on the main window in `tauri.conf.json` and
+  on the Library window's `WebviewWindow` options in `App.tsx` (we don't
+  use native file-drop-into-window for anything, so there's no loss).
+- Re-tested after the fix: dragging a NEXT row onto NOW PLAYING **did**
+  switch it — confirmed via screenshot, not inferred (NOW PLAYING's
+  title/artist changed to match the dragged track). A second attempt in
+  the same session fell back to a click instead of a drag — some
+  residual flakiness remains, consistent with how finicky *synthetic*
+  drag gestures specifically are known to be (timing/discretization
+  issues that a continuous real mouse/trackpad gesture doesn't hit). The
+  fix is confirmed real; whether it's **reliable** for actual use still
+  wants a few more real tries from you, but it's no longer fundamentally
+  broken.
 
 ## M5 — what's actually here
 

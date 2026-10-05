@@ -100,6 +100,7 @@ function App() {
       height: 640,
       minWidth: 720,
       minHeight: 420,
+      dragDropEnabled: false,
     });
   }
 
