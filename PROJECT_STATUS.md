@@ -25,7 +25,7 @@ Short version:
 | # | Milestone | Status |
 |---|---|---|
 | M0 | Project scaffold, workspace, SQLite + migrations wired | **Done** |
-| M1 | Folder picker, recursive scan, metadata extraction, dedup | Not started |
+| M1 | Folder picker, recursive scan, metadata extraction, dedup | **Done** |
 | M2 | Background BPM/key/energy analysis pipeline | Not started |
 | M3 | Library browser UI | Not started |
 | M4 | NOW PLAYING manual select / drag-in | Not started |
@@ -69,6 +69,46 @@ once M1 adds real library commands.
 The frontend is still the default Tauri/React template (`npm create
 tauri-app` output) — no MixFlow UI yet. That's M1+.
 
+## M1 — what's actually here
+
+Real folder scanning, end to end:
+
+- `pick_music_folder` command opens a native macOS folder picker (`rfd`).
+- `scan_library_folder(folder)` walks it recursively (`walkdir`), filters to
+  known audio extensions (mp3/flac/wav/m4a/mp4/aac/ogg/aif/aiff), and for
+  each file: hashes the content (`blake3`, streamed — not loaded whole into
+  memory), reads tags + audio properties (`lofty`: title, artist, album,
+  genre, year, duration, bitrate, sample rate, format), and upserts into
+  `tracks` via `mixflow-db::library`.
+- Dedup: re-scanning a path updates the existing row rather than
+  duplicating it; a new path whose content hash matches an existing track
+  is still inserted (it's a real second file on disk) but a row is written
+  to `duplicates` linking the two, and the scan summary reports a
+  `duplicates_found` count — this is the OWNED/MISSING/POSSIBLE DUPLICATES
+  distinction from the spec, implemented at the hash level (exact-content
+  dedup). Fuzzy dedup (same song, different file/rip) is not implemented —
+  postponed, not silently approximated.
+- Progress is streamed to the frontend via a `scan-progress` Tauri event
+  (current/total/filename) as the scan runs; the scan itself runs as a
+  synchronous command, which Tauri schedules off the main thread by
+  default, so the UI stays responsive.
+- `mixflow-db::library` has 3 new unit tests (fresh insert, re-scan
+  updates in place, same-content-new-path is flagged as a duplicate) — 6/6
+  passing in `mixflow-db` total.
+- Frontend: replaced the default template with a real (if minimal) Library
+  screen — folder picker button, live progress bar, and a results summary
+  (files found / added / updated / duplicates / errors). Dark theme now
+  applies unconditionally (DJ booth requirement — not just `prefers-color-
+  scheme`), flat colors, no gradients.
+
+**Verified against a real scan**, not just unit tests: built the debug
+`.app`, drove the actual native folder picker, and pointed it at a
+synthetic test library (2 distinct WAV files + 1 exact duplicate + 1
+non-audio file, one of them in a subfolder to test recursion). Result:
+3 files found (notes.txt correctly excluded), 3 added, 1 duplicate
+correctly flagged, 0 errors — confirmed both in the UI and by querying
+the actual SQLite file directly.
+
 ## How to run it
 
 ```bash
@@ -80,7 +120,7 @@ Rust side verified independently of the GUI:
 
 ```bash
 cargo build --workspace   # whole workspace compiles
-cargo test --workspace    # mixflow-db: 3/3 passing
+cargo test --workspace    # mixflow-db: 6/6 passing
 ```
 
 GUI smoke test: built a debug `.app` bundle (`npm run tauri build --

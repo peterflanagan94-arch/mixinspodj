@@ -1,7 +1,9 @@
 use std::sync::Mutex;
 use tauri::Manager;
 
-struct DbState(Mutex<rusqlite::Connection>);
+mod library_scan;
+
+pub(crate) struct DbState(pub(crate) Mutex<rusqlite::Connection>);
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -47,7 +49,12 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, db_health_check])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            db_health_check,
+            library_scan::pick_music_folder,
+            library_scan::scan_library_folder
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
