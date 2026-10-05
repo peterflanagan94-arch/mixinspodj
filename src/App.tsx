@@ -1,124 +1,98 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { TopBar } from "./components/TopBar";
+import { NowPlaying } from "./components/NowPlaying";
+import { ModeRow } from "./components/ModeRow";
+import { FilterRow, Filter } from "./components/FilterRow";
+import { NextList } from "./components/NextList";
+import { SearchPanel } from "./components/SearchPanel";
+import { SettingsPanel } from "./components/SettingsPanel";
+import { DirectionMode, EventContext, TrackSummary } from "./types";
 import "./App.css";
-
-type ScanProgress = {
-  current: number;
-  total: number;
-  current_file: string;
-};
-
-type ScanSummary = {
-  folder: string;
-  files_found: number;
-  inserted: number;
-  updated: number;
-  duplicates_found: number;
-  errors: number;
-};
 
 function App() {
   const [dbStatus, setDbStatus] = useState<string>("connecting…");
-  const [folder, setFolder] = useState<string | null>(null);
-  const [progress, setProgress] = useState<ScanProgress | null>(null);
-  const [summary, setSummary] = useState<ScanSummary | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [tracks, setTracks] = useState<TrackSummary[]>([]);
+  const [nowPlayingId, setNowPlayingId] = useState<number | null>(null);
+
+  const [alwaysOnTop, setAlwaysOnTop] = useState(false);
+  const [eventContext, setEventContext] = useState<EventContext>("WEDDING");
+  const [activeMode, setActiveMode] = useState<DirectionMode | null>(null);
+  const [activeFilters, setActiveFilters] = useState<Filter[]>([]);
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  async function refreshTracks() {
+    try {
+      const result = await invoke<TrackSummary[]>("list_tracks");
+      setTracks(result);
+    } catch (e) {
+      console.error("list_tracks failed", e);
+    }
+  }
 
   useEffect(() => {
     invoke<string>("db_health_check")
       .then(setDbStatus)
       .catch((e) => setDbStatus(`error: ${e}`));
+    refreshTracks();
   }, []);
 
-  useEffect(() => {
-    const unlisten = listen<ScanProgress>("scan-progress", (event) => {
-      setProgress(event.payload);
-    });
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, []);
-
-  async function chooseFolder() {
-    setError(null);
-    const picked = await invoke<string | null>("pick_music_folder");
-    if (!picked) return;
-    setFolder(picked);
-    setSummary(null);
-    setProgress(null);
-    setScanning(true);
-    try {
-      const result = await invoke<ScanSummary>("scan_library_folder", { folder: picked });
-      setSummary(result);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setScanning(false);
-    }
+  async function toggleAlwaysOnTop() {
+    const next = !alwaysOnTop;
+    await getCurrentWindow().setAlwaysOnTop(next);
+    setAlwaysOnTop(next);
   }
+
+  async function minimize() {
+    await getCurrentWindow().minimize();
+  }
+
+  const nowPlaying = tracks.find((t) => t.id === nowPlayingId) ?? null;
+  const nextTracks = tracks.filter((t) => t.id !== nowPlayingId);
 
   return (
     <main className="app">
-      <header className="app-header">
-        <h1>MixMe DJ</h1>
-        <span className="db-status">{dbStatus}</span>
-      </header>
+      <TopBar
+        alwaysOnTop={alwaysOnTop}
+        onToggleAlwaysOnTop={toggleAlwaysOnTop}
+        onMinimize={minimize}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSearch={() => setSearchOpen(true)}
+        eventContext={eventContext}
+        onChangeEventContext={setEventContext}
+      />
 
-      <section className="panel">
-        <h2>Library</h2>
-        <p className="hint">Select a folder of music files to scan into your library.</p>
+      <NowPlaying track={nowPlaying} onPick={() => setSearchOpen(true)} />
 
-        <button onClick={chooseFolder} disabled={scanning}>
-          {scanning ? "Scanning…" : "Select Music Folder"}
-        </button>
+      <ModeRow active={activeMode} onSelect={setActiveMode} />
 
-        {folder && <p className="folder-path">{folder}</p>}
+      <div className="next-header">
+        <span>NEXT</span>
+        <span className="next-header-note">{dbStatus.startsWith("connected") ? "" : dbStatus}</span>
+      </div>
 
-        {scanning && progress && (
-          <div className="progress">
-            <div className="progress-bar">
-              <div
-                className="progress-bar-fill"
-                style={{
-                  width: progress.total > 0 ? `${(progress.current / progress.total) * 100}%` : "0%",
-                }}
-              />
-            </div>
-            <p className="progress-label">
-              {progress.current} / {progress.total} — {progress.current_file}
-            </p>
-          </div>
-        )}
+      <NextList tracks={nextTracks} />
 
-        {error && <p className="error">{error}</p>}
+      <FilterRow
+        active={activeFilters}
+        onToggle={(f) =>
+          setActiveFilters((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]))
+        }
+      />
 
-        {summary && (
-          <div className="summary">
-            <div className="summary-row">
-              <span>Files found</span>
-              <span>{summary.files_found}</span>
-            </div>
-            <div className="summary-row">
-              <span>Added</span>
-              <span>{summary.inserted}</span>
-            </div>
-            <div className="summary-row">
-              <span>Updated</span>
-              <span>{summary.updated}</span>
-            </div>
-            <div className="summary-row">
-              <span>Possible duplicates</span>
-              <span>{summary.duplicates_found}</span>
-            </div>
-            <div className="summary-row">
-              <span>Errors</span>
-              <span>{summary.errors}</span>
-            </div>
-          </div>
-        )}
-      </section>
+      <SearchPanel
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelectTrack={(track) => setNowPlayingId(track.id)}
+      />
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onScanComplete={refreshTracks}
+      />
     </main>
   );
 }

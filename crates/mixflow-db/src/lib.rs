@@ -1,6 +1,7 @@
-//! Local SQLite access for MixMe DJ. The database is the source of truth for
-//! everything MixMe DJ infers about a library — source music files are never
-//! modified unless the user explicitly opts in elsewhere in the app.
+//! Local SQLite access for MixInspo DJ. The database is the source of truth
+//! for everything MixInspo DJ infers about a library — source music files
+//! are never modified unless the user explicitly opts in elsewhere in the
+//! app.
 
 use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
@@ -20,7 +21,7 @@ fn migrations() -> Migrations<'static> {
     Migrations::new(vec![M::up(include_str!("migrations/0001_init.sql"))])
 }
 
-/// Opens (creating if necessary) the MixMe DJ database at `path` and brings
+/// Opens (creating if necessary) the MixInspo DJ database at `path` and brings
 /// its schema up to date.
 pub fn connect(path: impl AsRef<Path>) -> Result<Connection, DbError> {
     let mut conn = Connection::open(path)?;

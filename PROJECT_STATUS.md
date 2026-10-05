@@ -1,11 +1,11 @@
-# MixMe DJ — Project Status
+# MixInspo DJ — Project Status
 
-Product name (on screen: "MixMe DJ"); built so a future rename only touches
-`tauri.conf.json`, `package.json`, and the app identifier — nothing in the
-architecture depends on the name. (Previously built under the working
-title "MixFlow" — renamed 2026-10-05; internal crate names under `crates/`
-still say `mixflow-*`, since those are implementation-internal, not the
-product's identity.)
+Product name (on screen: "MixInspo DJ"); built so a future rename only
+touches `tauri.conf.json`, `package.json`, and the app identifier — nothing
+in the architecture depends on the name. Renamed twice so far: "MixFlow"
+(working title) → "MixMe DJ" → "MixInspo DJ", both 2026-10-05. Internal
+crate names under `crates/` still say `mixflow-*`, since those are
+implementation-internal, not the product's identity.
 
 ## Where this came from
 
@@ -29,6 +29,7 @@ Short version:
 |---|---|---|
 | M0 | Project scaffold, workspace, SQLite + migrations wired | **Done** |
 | M1 | Folder picker, recursive scan, metadata extraction, dedup | **Done** |
+| — | Compact Live shell (design direction, cross-cutting) | **Done** |
 | M2 | Background BPM/key/energy analysis pipeline | Not started |
 | M3 | Library browser UI | Not started |
 | M4 | NOW PLAYING manual select / drag-in | Not started |
@@ -45,7 +46,7 @@ these so the shape is right, but nothing in them is implemented.
 ## M0 — what's actually here
 
 ```
-mixmedj/
+mixinspodj/
   Cargo.toml                    # workspace root
   src-tauri/                    # Tauri app crate — commands, app setup
   crates/
@@ -64,13 +65,13 @@ acquisition_log) and 3 passing unit tests (migration validity, table
 presence, insert/read round-trip).
 
 The Tauri app wires this up for real: on startup it opens
-`<app data dir>/mixmedj.sqlite3`, runs migrations, and exposes a
+`<app data dir>/mixinspodj.sqlite3`, runs migrations, and exposes a
 `db_health_check` command the frontend can call to prove the connection is
 live end-to-end. This is scaffolding, not a long-term API — it goes away
 once M1 adds real library commands.
 
 The frontend is still the default Tauri/React template (`npm create
-tauri-app` output) — no MixMe DJ UI yet. That's M1+.
+tauri-app` output) — no MixInspo DJ UI yet. That's M1+.
 
 ## M1 — what's actually here
 
@@ -112,10 +113,86 @@ non-audio file, one of them in a subfolder to test recursion). Result:
 correctly flagged, 0 errors — confirmed both in the UI and by querying
 the actual SQLite file directly.
 
+## Compact Live shell — what's actually here
+
+A full redesign of the window around a narrow, always-on-top-capable
+utility-panel form factor (~410px wide), inspired by (not copied from —
+original terms, original layout decisions, MixInspo brand colors) a
+reference product the user walked through: PulseDJ's compact DJ-companion
+window, plus its public FAQ/quick-guide content for mechanics.
+
+**Design system:** CSS custom properties for MixInspo cyan (`#27c1d3`,
+active/live/selected) and MixInspo yellow (`#ffc13b`, attention/discovery),
+near-black background, flat colors, no gradients — `src/App.css`.
+
+**Real and wired:**
+- Window resized to the narrow panel form factor (410×760, min 360×480 —
+  `tauri.conf.json`).
+- Top bar: brand mark, LIVE badge, event-context selector (Wedding/18th
+  /.../Club/Bar/Corporate/Other — local state only, not yet used by any
+  scoring), search icon, **real** Always-On-Top toggle (Tauri
+  `setAlwaysOnTop`, new `core:window:allow-set-always-on-top` capability),
+  **real** minimize.
+- NOW PLAYING: compact single-row card, thin cyan left border, manually
+  selectable (via the search panel) from the real scanned library — BPM/
+  key/energy shown as real values once present, `—` when not (no fake
+  numbers; M2 hasn't run yet so these are always `—` today).
+- NEXT list: compact two-line rows (title / artist · bpm · key) for every
+  other track in the library, dominant vertical space, scrollable. Drag
+  handle (⋮⋮) shown static cyan — "local file available" is actually true
+  for every scanned track today; it is **not** wired to real OS drag-out
+  to another app yet (see Deferred below).
+- FIND A TRACK (search icon): real local search (new `search_tracks`
+  backend command, SQL LIKE over title/artist) against the actual scanned
+  library. A match shows "✓ IN LIBRARY" and selecting it sets NOW PLAYING.
+  No match shows "Not in your library" with a **working** COPY action
+  (writes the typed name to the system clipboard) — this mirrors a pattern
+  from the PulseDJ FAQ (click-to-copy instead of a fake action) and is
+  deliberately not a disabled "GET TRACK" button, since GET MUSIC
+  acquisition isn't built.
+- SETTINGS (gear icon): houses the M1 library-scan flow (unchanged
+  behavior, moved into a panel) plus an explicit written note that mini
+  mode, menu-bar show/hide, launch-at-login, and remembering window
+  position/size are not built.
+- New backend commands: `list_tracks`, `search_tracks` in
+  `src-tauri/src/tracks.rs`.
+
+**Visual-only / local React state, not wired to anything real yet** (no
+recommendation engine exists for them to affect — documented in-code, not
+silently pretended to work):
+- Quick direction controls (KEEP / BUILD↑ / COOL↓ / SWITCH↪ / RESCUE) —
+  `ModeRow.tsx`.
+- Bottom filter chips (LOCAL / SIMILAR / UNPLAYED / BPM ±5 / SWITCH,
+  translated from PulseDJ's Draggable/Similar/Fresh/BPM/Curveball chip
+  set into original terms) — `FilterRow.tsx`.
+
+**Deliberately not attempted this pass** (each is real, nontrivial work
+that deserves its own milestone, not a rushed bolt-on):
+- Native drag-out of a local file from the app window to another
+  application (Rekordbox/Serato/VirtualDJ) — the brief explicitly asked to
+  investigate this and not fake it. Not investigated yet.
+- Mini Mode, menu-bar tray icon + global show/hide, launch at login,
+  remembering window position/size/current gig across restarts.
+- Match %, energy bar, "already played" dimming on NEXT rows — all need
+  M5 (scoring) or M7 (play tracking), which don't exist yet. Honestly
+  blank today, not faked.
+- OWNED ONLY toggle and genre/era/key filter wiring — not meaningful until
+  a Discover (non-owned) mode exists.
+- Track history back-control.
+
+**Verified live, not just compiled:** built the debug `.app`, scanned a
+6-track synthetic library (real ID3-tagged WAVs via `mutagen`) through the
+real Settings flow, confirmed the NEXT list renders real titles/artists
+with honest `—` BPM/key, searched and selected a track into NOW PLAYING
+(correctly removed from NEXT), searched a track that doesn't exist and
+confirmed the COPY button actually writes to the system clipboard (read
+back via the OS clipboard, not assumed), and toggled Always-On-Top and
+confirmed the icon's color state on the real rendered pixels.
+
 ## How to run it
 
 ```bash
-cd ~/mixmedj
+cd ~/mixinspodj
 npm run tauri dev
 ```
 

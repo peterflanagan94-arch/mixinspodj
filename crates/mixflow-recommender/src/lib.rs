@@ -1,4 +1,4 @@
-//! The MixMe DJ scoring engine — deterministic, explainable "best next track"
+//! The MixInspo DJ scoring engine — deterministic, explainable "best next track"
 //! recommendations. Pure functions only: no filesystem or network access,
 //! so this crate stays independently unit-testable.
 //!

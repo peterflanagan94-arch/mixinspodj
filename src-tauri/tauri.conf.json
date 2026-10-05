@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MixMe DJ",
+  "productName": "MixInspo DJ",
   "version": "0.1.0",
-  "identifier": "com.peterflanagan.mixmedj",
+  "identifier": "com.peterflanagan.mixinspodj",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "MixMe DJ",
-        "width": 800,
-        "height": 600
+        "title": "MixInspo DJ",
+        "width": 410,
+        "height": 760,
+        "minWidth": 360,
+        "minHeight": 480
       }
     ],
     "security": {
