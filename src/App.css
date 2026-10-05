@@ -289,12 +289,28 @@ button {
 }
 
 .track-row-title {
+  flex: 1;
+  min-width: 0;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.track-row-score {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cyan);
+  font-variant-numeric: tabular-nums;
+}
+
+.track-row-partial {
+  margin-left: 1px;
+  color: var(--text-tertiary);
+  font-weight: 400;
 }
 
 .track-row-meta {
@@ -307,6 +323,15 @@ button {
 
 .track-row-meta span:first-child {
   flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-row-reason {
+  margin-top: 1px;
+  font-size: 10px;
+  color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -1,54 +1,76 @@
-import { TrackSummary, TRACK_DRAG_MIME } from "../types";
+import { ScoredTrack, TrackSummary, TRACK_DRAG_MIME } from "../types";
 
 type Props = {
   tracks: TrackSummary[];
+  nowPlayingId: number | null;
+  /** Already sorted best-match-first by the backend. */
+  recommendations: ScoredTrack[];
 };
 
 /**
- * Compact recommendation rows. Match % and an energy/popularity bar are
- * intentionally omitted rather than faked — there's no scoring engine yet
- * (M5), so this currently renders the library (minus the now-playing
- * track) as plain rows, honestly, with "—" wherever a field hasn't been
- * analyzed (M2 fills BPM/key/energy in once a track's been through
- * Analyze Library; it's not that the pipeline doesn't exist).
+ * Compact recommendation rows, scored by mixflow-recommender (M5) —
+ * BPM, harmonic/key, energy, genre, and era compatibility, weighted by
+ * the active mode. A PARTIAL_DATA badge means some of those couldn't be
+ * computed (the track hasn't been analyzed, say) — shown as "~on the
+ * score rather than hidden, so the DJ knows it's not full-confidence.
+ * UNSCORED (no usable data at all) shows "—" instead of "0%": a true
+ * zero would wrongly read as "bad match" rather than "unknown."
  *
- * Each row is a real HTML5 drag source (M4's "drag-in" — the handle was
- * purely decorative before this) — drag it onto NOW PLAYING to switch to
- * it. Works across the Library window too, since native DnD is owned by
- * the OS, not React.
+ * Each row is a real HTML5 drag source (M4) — drag it onto NOW PLAYING
+ * to switch to it.
  */
-export function NextList({ tracks }: Props) {
-  if (tracks.length === 0) {
+export function NextList({ tracks, nowPlayingId, recommendations }: Props) {
+  if (nowPlayingId === null) {
+    return <div className="next-empty">Select a Now Playing track to see recommendations.</div>;
+  }
+
+  const byId = new Map(tracks.map((t) => [t.id, t]));
+  const rows = recommendations
+    .map((scored) => ({ scored, track: byId.get(scored.track_id) }))
+    .filter((row): row is { scored: ScoredTrack; track: TrackSummary } => row.track !== undefined);
+
+  if (rows.length === 0) {
     return <div className="next-empty">No other tracks in your library yet.</div>;
   }
 
   return (
     <div className="next-list">
-      {tracks.map((track) => (
-        <div
-          className="track-row"
-          key={track.id}
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.setData(TRACK_DRAG_MIME, String(track.id));
-            e.dataTransfer.effectAllowed = "copy";
-          }}
-        >
-          <span className="drag-handle drag-handle-local" title="Drag to Now Playing">
-            ⋮⋮
-          </span>
-          <div className="track-row-main">
-            <div className="track-row-title-line">
-              <span className="track-row-title">{track.title ?? "Untitled"}</span>
-            </div>
-            <div className="track-row-meta">
-              <span>{track.artist ?? "Unknown artist"}</span>
-              <span>{track.bpm !== null ? Math.round(track.bpm) : "—"}</span>
-              <span>{track.camelot_key ?? "—"}</span>
+      {rows.map(({ scored, track }) => {
+        const unscored = scored.badges.includes("UNSCORED");
+        const partial = scored.badges.includes("PARTIAL_DATA");
+        const topReason = scored.components[0]?.explanation;
+
+        return (
+          <div
+            className="track-row"
+            key={track.id}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(TRACK_DRAG_MIME, String(track.id));
+              e.dataTransfer.effectAllowed = "copy";
+            }}
+          >
+            <span className="drag-handle drag-handle-local" title="Drag to Now Playing">
+              ⋮⋮
+            </span>
+            <div className="track-row-main">
+              <div className="track-row-title-line">
+                <span className="track-row-title">{track.title ?? "Untitled"}</span>
+                <span className="track-row-score">
+                  {unscored ? "—" : `${Math.round(scored.score_percent)}%`}
+                  {partial && <span className="track-row-partial">~</span>}
+                </span>
+              </div>
+              <div className="track-row-meta">
+                <span>{track.artist ?? "Unknown artist"}</span>
+                <span>{track.bpm !== null ? Math.round(track.bpm) : "—"}</span>
+                <span>{track.camelot_key ?? "—"}</span>
+              </div>
+              {topReason && <div className="track-row-reason">{topReason}</div>}
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

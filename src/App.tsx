@@ -9,7 +9,7 @@ import { FilterRow, Filter } from "./components/FilterRow";
 import { NextList } from "./components/NextList";
 import { SearchPanel } from "./components/SearchPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { DirectionMode, EventContext, TrackSummary } from "./types";
+import { DirectionMode, EventContext, ScoredTrack, TrackSummary } from "./types";
 import "./App.css";
 
 function App() {
@@ -24,6 +24,9 @@ function App() {
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const [recommendations, setRecommendations] = useState<ScoredTrack[]>([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
 
   async function refreshTracks() {
     try {
@@ -61,6 +64,29 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    if (nowPlayingId === null) {
+      setRecommendations([]);
+      return;
+    }
+    let cancelled = false;
+    setRecommendationsLoading(true);
+    invoke<ScoredTrack[]>("recommend_next", { nowPlayingId, mode: activeMode ?? "KEEP" })
+      .then((result) => {
+        if (!cancelled) setRecommendations(result);
+      })
+      .catch((e) => {
+        console.error("recommend_next failed", e);
+        if (!cancelled) setRecommendations([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRecommendationsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [nowPlayingId, activeMode, tracks]);
+
   async function openLibrary() {
     const existing = await WebviewWindow.getByLabel("library");
     if (existing) {
@@ -78,7 +104,6 @@ function App() {
   }
 
   const nowPlaying = tracks.find((t) => t.id === nowPlayingId) ?? null;
-  const nextTracks = tracks.filter((t) => t.id !== nowPlayingId);
 
   return (
     <main className="app">
@@ -99,10 +124,12 @@ function App() {
 
       <div className="next-header">
         <span>NEXT</span>
-        <span className="next-header-note">{dbStatus.startsWith("connected") ? "" : dbStatus}</span>
+        <span className="next-header-note">
+          {dbStatus.startsWith("connected") ? (recommendationsLoading ? "scoring…" : "") : dbStatus}
+        </span>
       </div>
 
-      <NextList tracks={nextTracks} />
+      <NextList tracks={tracks} nowPlayingId={nowPlayingId} recommendations={recommendations} />
 
       <FilterRow
         active={activeFilters}

@@ -57,6 +57,22 @@ export type AnalyzeSummary = {
   errors: number;
 };
 
+export type ScoreComponent = {
+  name: string;
+  weight: number;
+  value: number;
+  explanation: string;
+};
+
+export type ScoredTrack = {
+  track_id: number;
+  score_percent: number;
+  /** Sorted strongest-contribution-first by the backend. */
+  components: ScoreComponent[];
+  /** "PARTIAL_DATA" (some components missing) or "UNSCORED" (none at all) */
+  badges: string[];
+};
+
 export const DIRECTION_MODES = ["KEEP", "BUILD", "COOL", "SWITCH", "RESCUE"] as const;
 export type DirectionMode = (typeof DIRECTION_MODES)[number];
 

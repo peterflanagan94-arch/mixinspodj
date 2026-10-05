@@ -3,6 +3,7 @@ use tauri::Manager;
 
 mod analysis;
 mod library_scan;
+mod recommend;
 mod tracks;
 
 pub(crate) struct DbState(pub(crate) Mutex<rusqlite::Connection>);
@@ -52,7 +53,8 @@ pub fn run() {
             tracks::list_tracks,
             tracks::search_tracks,
             tracks::update_track_metadata,
-            analysis::analyze_library
+            analysis::analyze_library,
+            recommend::recommend_next
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

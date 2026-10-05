@@ -33,8 +33,8 @@ Short version:
 | M2 | Background BPM/key/energy analysis pipeline | **Done** |
 | M3 | Library browser UI | **Done** |
 | M4 | NOW PLAYING manual select / drag-in | **Done**¹ |
-| M5 | Recommendation engine wired to UI | Not started |
-| M6 | Mode buttons (Keep Dancing / Build Energy / etc.) | Not started |
+| M5 | Recommendation engine wired to UI | **Done** |
+| M6 | Mode buttons (Keep Dancing / Build Energy / etc.) | **Done** (landed as part of M5 — the buttons existed since the Compact Live shell, M5 is what gave them something real to affect) |
 | M7 | Play tracking, already-played detection | Not started |
 | M8 | Local backups, crash recovery, QA pass, tag v0.1 | Not started |
 
@@ -336,6 +336,76 @@ not a React one, so cross-window isn't extra work once in-window works.
 - **This needs a human with a real mouse or trackpad to confirm before
   it's trusted as working.** Flagging this explicitly rather than
   claiming verification I don't actually have.
+
+## M5 — what's actually here
+
+The recommendation engine — real this time, not the stub types that sat
+in `mixflow-recommender` since M0. This is the milestone that makes the
+NEXT list stop being "your whole library" and start being actual scored
+recommendations, and the one that turns KEEP/BUILD/COOL/SWITCH/RESCUE
+from decoration into something that changes results.
+
+**Scored components** (each in its own module, each independently unit
+tested): BPM compatibility (`bpm.rs` — tiered by % difference, with
+half/double-tempo folding so a 180 BPM track mixes under a 90 BPM one);
+harmonic/Camelot compatibility (`harmonic.rs` — same key, relative
+major/minor, adjacent wheel position, circular wheel distance); energy
+compatibility (`energy.rs` — the one component whose *target*, not just
+weight, genuinely changes per mode: KEEP wants flat energy, BUILD wants
++0.5 to +3, COOL wants -0.5 to -3, RESCUE ignores the delta entirely and
+rewards high absolute energy — "proven crowd favourite," not "a clever
+transition," matching the original brief); genre compatibility
+(`genre.rs` — exact match only, no adjacency map, because a fabricated
+"Disco is close to Funk" table would be a confident-sounding guess, not
+real data — and the one mode where this inverts: SWITCH rewards a
+*different* genre); era compatibility (`era.rs` — year-distance decay).
+
+**What's deliberately not in there**: historical transition frequency and
+event-type suitability, both part of the original design, both skipped
+because there's no real data to compute them from yet — no play tracking
+(M7) means no transition history, no PREP module means no real event
+data. Faking either would be worse than the honest gap; the weighted-sum
+architecture already has room for them.
+
+**Missing-data handling, the part worth being precise about**: a
+component whose inputs are missing (track not analyzed yet, no genre tag,
+whatever) is left out of that track's score entirely and the rest
+renormalize over the weight that's actually present — never guessed at
+as "neutral." A track scored on fewer than all 5 components carries a
+`PARTIAL_DATA` badge; a track with zero usable components scores `0%`
+internally but is tagged `UNSCORED`, and the UI shows `—` instead of
+`0%` for those — a real `0%` would misreport "bad match" when the honest
+answer is "unknown."
+
+**Wiring**: new `recommend_next(now_playing_id, mode)` command
+(`src-tauri/src/recommend.rs`) loads features for the current track and
+every other non-missing-file track directly from SQLite, calls
+`mixflow_recommender::score_candidates`, returns results already sorted
+best-first. `App.tsx` re-fetches whenever NOW PLAYING or the active mode
+changes. NEXT rows now show score%, and the single strongest-contributing
+component's explanation as a small line under each row — the "why" the
+original brief asked every recommendation to carry.
+
+**Verified live against real analyzed data**, not just the 32 unit
+tests (which cover every component in isolation plus end-to-end ranking
+and mode-reordering behavior): built 5 synthetic tracks with known
+BPM/key/genre/year, scanned and analyzed them through the real app,
+set one as NOW PLAYING, and confirmed:
+- **KEEP**: the closest BPM+same-key track ranked #1 at 100%, a
+  same-BPM-same-key-but-different-genre track came 2nd at 94%, an
+  adjacent-key track 3rd at 90%, and the genuinely mismatched track last
+  at 35% — with correct explanations ("BPM near-identical", "BPM
+  compatible") on each row.
+- **SWITCH**: re-ranked *instantly* on clicking the mode button — the
+  different-genre candidate jumped from 2nd to 1st (97%, "Genre change
+  fits Switch"), the same-genre track dropped from 100% to 76%, and even
+  the harmonically-mismatched track rose to 55% purely because it was
+  also a genre change.
+- **RESCUE**: button turns MixInspo yellow as designed; the track with
+  the lowest absolute energy dropped to last with "Low energy — risky
+  for a rescue," independent of how close its BPM/key were.
+
+`mixflow-recommender`: 32/32 tests passing. Full workspace: 50/50.
 
 ## How to run it
 
