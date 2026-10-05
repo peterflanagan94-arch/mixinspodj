@@ -62,7 +62,7 @@ function App() {
   return (
     <main className="app">
       <header className="app-header">
-        <h1>MixFlow</h1>
+        <h1>MixMe DJ</h1>
         <span className="db-status">{dbStatus}</span>
       </header>
 

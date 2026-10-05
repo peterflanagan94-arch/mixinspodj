@@ -2222,23 +2222,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mixflow"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "lofty",
- "mixflow-db",
- "rfd",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "walkdir",
-]
-
-[[package]]
 name = "mixflow-analysis"
 version = "0.1.0"
 
@@ -2262,6 +2245,23 @@ version = "0.1.0"
 [[package]]
 name = "mixflow-session"
 version = "0.1.0"
+
+[[package]]
+name = "mixmedj"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "lofty",
+ "mixflow-db",
+ "rfd",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "walkdir",
+]
 
 [[package]]
 name = "muda"

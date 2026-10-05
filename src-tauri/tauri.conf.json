@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mixflow",
+  "productName": "MixMe DJ",
   "version": "0.1.0",
-  "identifier": "com.peterflanagan.mixflow",
+  "identifier": "com.peterflanagan.mixmedj",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "mixflow",
+        "title": "MixMe DJ",
         "width": 800,
         "height": 600
       }

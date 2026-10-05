@@ -1,8 +1,11 @@
-# MixFlow — Project Status
+# MixMe DJ — Project Status
 
-Working title; renaming later should only touch `tauri.conf.json`,
-`package.json`, and the app identifier — nothing in the architecture
-depends on the name.
+Product name (on screen: "MixMe DJ"); built so a future rename only touches
+`tauri.conf.json`, `package.json`, and the app identifier — nothing in the
+architecture depends on the name. (Previously built under the working
+title "MixFlow" — renamed 2026-10-05; internal crate names under `crates/`
+still say `mixflow-*`, since those are implementation-internal, not the
+product's identity.)
 
 ## Where this came from
 
@@ -42,7 +45,7 @@ these so the shape is right, but nothing in them is implemented.
 ## M0 — what's actually here
 
 ```
-mixflow/
+mixmedj/
   Cargo.toml                    # workspace root
   src-tauri/                    # Tauri app crate — commands, app setup
   crates/
@@ -61,13 +64,13 @@ acquisition_log) and 3 passing unit tests (migration validity, table
 presence, insert/read round-trip).
 
 The Tauri app wires this up for real: on startup it opens
-`<app data dir>/mixflow.sqlite3`, runs migrations, and exposes a
+`<app data dir>/mixmedj.sqlite3`, runs migrations, and exposes a
 `db_health_check` command the frontend can call to prove the connection is
 live end-to-end. This is scaffolding, not a long-term API — it goes away
 once M1 adds real library commands.
 
 The frontend is still the default Tauri/React template (`npm create
-tauri-app` output) — no MixFlow UI yet. That's M1+.
+tauri-app` output) — no MixMe DJ UI yet. That's M1+.
 
 ## M1 — what's actually here
 
@@ -112,7 +115,7 @@ the actual SQLite file directly.
 ## How to run it
 
 ```bash
-cd ~/mixflow
+cd ~/mixmedj
 npm run tauri dev
 ```
 

@@ -43,7 +43,7 @@ pub fn run() {
                 .expect("app data dir should be resolvable");
             std::fs::create_dir_all(&data_dir).expect("should be able to create app data dir");
 
-            let db_path = data_dir.join("mixflow.sqlite3");
+            let db_path = data_dir.join("mixmedj.sqlite3");
             let conn = mixflow_db::connect(&db_path).expect("database should open and migrate");
             app.manage(DbState(Mutex::new(conn)));
 
