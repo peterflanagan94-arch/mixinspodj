@@ -83,11 +83,19 @@ cargo build --workspace   # whole workspace compiles
 cargo test --workspace    # mixflow-db: 3/3 passing
 ```
 
+GUI smoke test: built a debug `.app` bundle (`npm run tauri build --
+--debug`) and launched it with `open`, then screenshotted the live window —
+it opens, renders the dark default template, and its controls are
+interactive.
+
+Note on `npm run tauri dev`: launching it from a detached/background shell
+(no attached terminal) produced a window that Cocoa considered visible but
+that never actually appeared on screen or in Mission Control — an artifact
+of the detached launch, not an app bug. Running `npm run tauri dev`
+normally from an interactive Terminal does not have this problem; it only
+showed up because of how this session automated the check. Worth knowing
+if a future automated check does the same.
+
 ## Known gaps / honesty notes
 
-- No `npm run tauri dev` GUI smoke test has been run yet in this session —
-  only `cargo build`/`cargo test` (Rust) and `tsc --noEmit` (frontend
-  type-check). Worth doing a manual run before trusting the window opens
-  cleanly on your machine.
-- No git repository initialized yet.
 - No CI configured yet.
