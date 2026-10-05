@@ -31,7 +31,7 @@ Short version:
 | M1 | Folder picker, recursive scan, metadata extraction, dedup | **Done** |
 | — | Compact Live shell (design direction, cross-cutting) | **Done** |
 | M2 | Background BPM/key/energy analysis pipeline | **Done** |
-| M3 | Library browser UI | Not started |
+| M3 | Library browser UI | **Done** |
 | M4 | NOW PLAYING manual select / drag-in | Not started |
 | M5 | Recommendation engine wired to UI | Not started |
 | M6 | Mode buttons (Keep Dancing / Build Energy / etc.) | Not started |
@@ -241,6 +241,57 @@ DSP implemented directly in `mixflow-analysis`:
 
 `mixflow-analysis`: 8/8 tests passing. `mixflow-db`: 8/8 (2 new, covering
 the analysis repository functions).
+
+## M3 — what's actually here
+
+A dense, sortable, searchable library table — deliberately a **separate
+window**, not squeezed into the 410px Live panel. Rekordbox/Serato keep
+their library browser and performance view separate for the same reason:
+a sortable multi-column table and a glanceable compact utility panel want
+fundamentally different amounts of space, and the Live panel's whole
+point is staying narrow.
+
+- Opened from a new icon in the Live view's top bar
+  (`WebviewWindow` with `url: "index.html?view=library"` — same SPA,
+  routed client-side in `main.tsx` off a `?view=` query param, not a
+  separate build). Re-clicking focuses the existing window instead of
+  opening a second one (`WebviewWindow.getByLabel`).
+- New capability permissions required for this: `core:webview:allow-
+  create-webview-window` (spawn it) and `core:window:allow-set-focus`
+  (focus the existing one) — added to `capabilities/default.json`, which
+  also now covers both `main` and `library` windows.
+- `list_tracks` expanded (album, genre, year, duration, danceability,
+  file_format, missing_file) and un-capped — it's now the library's full
+  data source, not just a 200-row preview.
+- Table: click any header to sort (asc/desc toggle), free-text filter
+  across title/artist/album/genre (client-side — the whole library is
+  already in memory from `list_tracks`), sensible `—` for anything not
+  yet analyzed.
+- Manual metadata edit: click a row → pre-filled edit panel (title,
+  artist, album, genre, year) → `update_track_metadata` → re-fetches.
+  Never touches the file on disk, same as the rest of the app — the
+  database stays the source of truth.
+- **Missing-file detection, actually wired, not just displayed**: the
+  table already had `missing_file` styling, but nothing ever set that
+  flag — a genuine gap, not a cosmetic one, since the UI would have
+  silently never triggered. Fixed by having `scan_library_folder`
+  pre-mark every track under the folder being scanned as missing, then
+  let each file actually found clear the flag again via the existing
+  upsert path; whatever's still marked after the scan genuinely wasn't
+  found. New `mixflow-db::library::mark_folder_tracks_missing`.
+- Shared design tokens extracted to `src/theme.css` so the Live panel and
+  the Library window stay visually consistent without duplicating the
+  color/type system.
+
+**Verified live**: built the `.app`, scanned a 4-track tagged library,
+opened the Library window and confirmed real metadata, sorting, and
+free-text search all work on actual data; edited a track's genre and
+confirmed the new value both in the UI and directly in SQLite; then
+deleted one of the four files on disk, re-scanned the same folder, and
+confirmed that track — and only that track — showed up dimmed red in the
+table, proving the missing-file flag is real, not decorative.
+
+`mixflow-db`: 10/10 tests (1 new, for the missing-file re-scan behavior).
 
 ## How to run it
 

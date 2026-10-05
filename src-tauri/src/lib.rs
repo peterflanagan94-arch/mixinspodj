@@ -51,6 +51,7 @@ pub fn run() {
             library_scan::scan_library_folder,
             tracks::list_tracks,
             tracks::search_tracks,
+            tracks::update_track_metadata,
             analysis::analyze_library
         ])
         .run(tauri::generate_context!())

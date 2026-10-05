@@ -1,0 +1,254 @@
+@import "./theme.css";
+
+body {
+  margin: 0;
+}
+
+.library {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+.library-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg-raised);
+  flex-shrink: 0;
+}
+
+.library-header h1 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.library-search {
+  flex: 1;
+  max-width: 420px;
+  padding: 6px 10px;
+  background: var(--bg-row);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.library-search:focus {
+  border-color: var(--cyan);
+}
+
+.library-count {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.library-table-wrap {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+.library-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.library-table thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--bg-raised);
+  z-index: 1;
+}
+
+.library-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.library-table th:hover {
+  color: var(--text-primary);
+}
+
+.sort-arrow {
+  color: var(--cyan);
+}
+
+.library-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+}
+
+.library-table tbody tr {
+  cursor: pointer;
+}
+
+.library-table tbody tr:hover {
+  background-color: var(--bg-row);
+}
+
+.library-table tbody tr.row-missing {
+  color: var(--text-tertiary);
+}
+
+.library-table tbody tr.row-missing td {
+  color: var(--danger);
+  opacity: 0.8;
+}
+
+.library-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* ===== Edit panel ===== */
+.panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.edit-panel {
+  width: 360px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+}
+
+.icon-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: var(--bg-row-hover);
+  color: var(--text-primary);
+}
+
+.edit-form {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.edit-form input {
+  padding: 6px 8px;
+  background: var(--bg-row);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: none;
+  outline: none;
+}
+
+.edit-form input:focus {
+  border-color: var(--cyan);
+}
+
+.edit-hint {
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: "SF Mono", Menlo, monospace;
+  word-break: break-all;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+button {
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  padding: 0.5em 1em;
+  font-size: 12px;
+  font-weight: 600;
+  background-color: var(--bg-row);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--cyan);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.primary {
+  border-color: var(--cyan);
+  background: var(--cyan-wash);
+  color: var(--cyan);
+}

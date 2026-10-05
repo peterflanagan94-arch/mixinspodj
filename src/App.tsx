@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TopBar } from "./components/TopBar";
 import { NowPlaying } from "./components/NowPlaying";
 import { ModeRow } from "./components/ModeRow";
@@ -50,6 +51,22 @@ function App() {
     await getCurrentWindow().minimize();
   }
 
+  async function openLibrary() {
+    const existing = await WebviewWindow.getByLabel("library");
+    if (existing) {
+      await existing.setFocus();
+      return;
+    }
+    new WebviewWindow("library", {
+      url: "index.html?view=library",
+      title: "MixInspo DJ — Library",
+      width: 960,
+      height: 640,
+      minWidth: 720,
+      minHeight: 420,
+    });
+  }
+
   const nowPlaying = tracks.find((t) => t.id === nowPlayingId) ?? null;
   const nextTracks = tracks.filter((t) => t.id !== nowPlayingId);
 
@@ -61,6 +78,7 @@ function App() {
         onMinimize={minimize}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenSearch={() => setSearchOpen(true)}
+        onOpenLibrary={openLibrary}
         eventContext={eventContext}
         onChangeEventContext={setEventContext}
       />

@@ -60,6 +60,10 @@ pub fn scan_library_folder(
     {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         library::upsert_library_folder(&conn, &folder).map_err(|e| e.to_string())?;
+        // Pre-mark everything under this folder missing; each file actually
+        // found below clears the flag again via upsert_track, so whatever's
+        // still marked afterward genuinely wasn't found this scan.
+        library::mark_folder_tracks_missing(&conn, &folder).map_err(|e| e.to_string())?;
     }
 
     for (index, entry) in audio_files.iter().enumerate() {

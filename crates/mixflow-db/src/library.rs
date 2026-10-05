@@ -41,6 +41,20 @@ pub fn upsert_library_folder(conn: &Connection, path: &str) -> Result<(), DbErro
     Ok(())
 }
 
+/// Marks every track previously recorded under `folder` as missing. Call
+/// this before re-scanning that folder — each file actually found during
+/// the scan clears the flag again via [`upsert_track`], so whatever's
+/// still marked missing afterward genuinely wasn't found this time
+/// (moved, renamed, or deleted outside the app).
+pub fn mark_folder_tracks_missing(conn: &Connection, folder: &str) -> Result<(), DbError> {
+    let prefix = format!("{folder}%");
+    conn.execute(
+        "UPDATE tracks SET missing_file = 1 WHERE file_path LIKE ?1",
+        params![prefix],
+    )?;
+    Ok(())
+}
+
 pub fn upsert_track(conn: &Connection, track: &NewTrack) -> Result<UpsertOutcome, DbError> {
     if let Some(existing_id) = find_track_id_by_path(conn, &track.file_path)? {
         conn.execute(
@@ -128,6 +142,28 @@ fn find_track_path_by_hash(conn: &Connection, file_hash: &str) -> Result<Option<
 pub fn count_tracks(conn: &Connection) -> Result<i64, DbError> {
     conn.query_row("SELECT count(*) FROM tracks", [], |row| row.get(0))
         .map_err(DbError::from)
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MetadataEdit {
+    pub track_id: i64,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub year: Option<i32>,
+}
+
+/// Manual metadata correction. The caller is expected to send the full
+/// current+edited field set (the UI pre-fills a form with current values)
+/// — a `None` here means "clear this field," not "leave unchanged."
+pub fn update_metadata(conn: &Connection, edit: &MetadataEdit) -> Result<(), DbError> {
+    conn.execute(
+        "UPDATE tracks SET title = ?1, artist = ?2, album = ?3, genre = ?4, year = ?5 \
+         WHERE id = ?6",
+        params![edit.title, edit.artist, edit.album, edit.genre, edit.year, edit.track_id],
+    )?;
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -306,5 +342,69 @@ mod tests {
             .query_row("SELECT count(*) FROM audio_features", [], |row| row.get(0))
             .unwrap();
         assert_eq!(feature_rows, 1);
+    }
+
+    #[test]
+    fn manual_edit_overwrites_scanned_metadata() {
+        let conn = connect_in_memory().unwrap();
+        let track_id = match upsert_track(&conn, &sample("/music/a.flac", "hash-a")).unwrap() {
+            UpsertOutcome::Inserted { track_id } => track_id,
+            other => panic!("expected Inserted, got {other:?}"),
+        };
+
+        update_metadata(
+            &conn,
+            &MetadataEdit {
+                track_id,
+                title: Some("September (Corrected)".into()),
+                artist: Some("Earth, Wind & Fire".into()),
+                album: Some("The Best Of".into()),
+                genre: Some("Disco".into()),
+                year: Some(1978),
+            },
+        )
+        .unwrap();
+
+        let (title, genre, year): (String, String, i32) = conn
+            .query_row(
+                "SELECT title, genre, year FROM tracks WHERE id = ?1",
+                params![track_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(title, "September (Corrected)");
+        assert_eq!(genre, "Disco");
+        assert_eq!(year, 1978);
+    }
+
+    #[test]
+    fn rescanning_a_folder_flags_files_no_longer_found_as_missing() {
+        let conn = connect_in_memory().unwrap();
+        upsert_track(&conn, &sample("/music/folder/a.flac", "hash-a")).unwrap();
+        upsert_track(&conn, &sample("/music/folder/b.flac", "hash-b")).unwrap();
+
+        // Simulate a re-scan where only a.flac is found this time (b.flac
+        // was deleted/moved outside the app): mark everything missing,
+        // then "find" only a.flac again.
+        mark_folder_tracks_missing(&conn, "/music/folder").unwrap();
+        upsert_track(&conn, &sample("/music/folder/a.flac", "hash-a")).unwrap();
+
+        let missing_count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM tracks WHERE missing_file = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(missing_count, 1);
+
+        let a_missing: i64 = conn
+            .query_row(
+                "SELECT missing_file FROM tracks WHERE file_path = '/music/folder/a.flac'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(a_missing, 0);
     }
 }

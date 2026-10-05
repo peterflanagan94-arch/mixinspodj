@@ -2,10 +2,26 @@ export type TrackSummary = {
   id: number;
   title: string | null;
   artist: string | null;
+  album: string | null;
+  genre: string | null;
+  year: number | null;
+  duration_ms: number | null;
   bpm: number | null;
   camelot_key: string | null;
   energy: number | null;
+  danceability: number | null;
+  file_format: string | null;
   file_path: string;
+  missing_file: boolean;
+};
+
+export type TrackMetadataInput = {
+  track_id: number;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  genre: string | null;
+  year: number | null;
 };
 
 export type ScanProgress = {

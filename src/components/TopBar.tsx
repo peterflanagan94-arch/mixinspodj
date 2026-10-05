@@ -6,6 +6,7 @@ type Props = {
   onMinimize: () => void;
   onOpenSettings: () => void;
   onOpenSearch: () => void;
+  onOpenLibrary: () => void;
   eventContext: EventContext;
   onChangeEventContext: (ctx: EventContext) => void;
 };
@@ -16,6 +17,7 @@ export function TopBar({
   onMinimize,
   onOpenSettings,
   onOpenSearch,
+  onOpenLibrary,
   eventContext,
   onChangeEventContext,
 }: Props) {
@@ -43,6 +45,13 @@ export function TopBar({
         </select>
       </div>
       <div className="topbar-right">
+        <button className="icon-btn" title="Library" onClick={onOpenLibrary}>
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <rect x="1" y="2" width="12" height="2.4" rx="0.6" fill="currentColor" />
+            <rect x="1" y="5.8" width="12" height="2.4" rx="0.6" fill="currentColor" />
+            <rect x="1" y="9.6" width="8" height="2.4" rx="0.6" fill="currentColor" />
+          </svg>
+        </button>
         <button className="icon-btn" title="Find a track" onClick={onOpenSearch}>
           ⌕
         </button>

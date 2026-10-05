@@ -1,12 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for the main window and the Library window it can open",
+  "windows": ["main", "library"],
   "permissions": [
     "core:default",
     "opener:default",
     "core:window:allow-set-always-on-top",
-    "core:window:allow-minimize"
+    "core:window:allow-minimize",
+    "core:window:allow-set-focus",
+    "core:webview:allow-create-webview-window"
   ]
 }
