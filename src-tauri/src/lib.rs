@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use tauri::Manager;
 
+mod analysis;
 mod library_scan;
 mod tracks;
 
@@ -49,7 +50,8 @@ pub fn run() {
             library_scan::pick_music_folder,
             library_scan::scan_library_folder,
             tracks::list_tracks,
-            tracks::search_tracks
+            tracks::search_tracks,
+            analysis::analyze_library
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

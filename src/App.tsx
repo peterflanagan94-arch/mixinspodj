@@ -91,7 +91,7 @@ function App() {
       <SettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onScanComplete={refreshTracks}
+        onLibraryChanged={refreshTracks}
       />
     </main>
   );

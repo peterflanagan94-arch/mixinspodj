@@ -1,46 +1,71 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { ScanProgress, ScanSummary } from "../types";
+import { AnalyzeProgress, AnalyzeSummary, ScanProgress, ScanSummary } from "../types";
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onScanComplete: () => void;
+  onLibraryChanged: () => void;
 };
 
-export function SettingsPanel({ open, onClose, onScanComplete }: Props) {
+export function SettingsPanel({ open, onClose, onLibraryChanged }: Props) {
   const [folder, setFolder] = useState<string | null>(null);
-  const [progress, setProgress] = useState<ScanProgress | null>(null);
-  const [summary, setSummary] = useState<ScanSummary | null>(null);
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+  const [scanSummary, setScanSummary] = useState<ScanSummary | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  const [analyzeProgress, setAnalyzeProgress] = useState<AnalyzeProgress | null>(null);
+  const [analyzeSummary, setAnalyzeSummary] = useState<AnalyzeSummary | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unlisten = listen<ScanProgress>("scan-progress", (event) => {
-      setProgress(event.payload);
+    const unlistenScan = listen<ScanProgress>("scan-progress", (event) => {
+      setScanProgress(event.payload);
+    });
+    const unlistenAnalyze = listen<AnalyzeProgress>("analysis-progress", (event) => {
+      setAnalyzeProgress(event.payload);
     });
     return () => {
-      unlisten.then((f) => f());
+      unlistenScan.then((f) => f());
+      unlistenAnalyze.then((f) => f());
     };
   }, []);
 
   async function chooseFolder() {
-    setError(null);
+    setScanError(null);
     const picked = await invoke<string | null>("pick_music_folder");
     if (!picked) return;
     setFolder(picked);
-    setSummary(null);
-    setProgress(null);
+    setScanSummary(null);
+    setScanProgress(null);
     setScanning(true);
     try {
       const result = await invoke<ScanSummary>("scan_library_folder", { folder: picked });
-      setSummary(result);
-      onScanComplete();
+      setScanSummary(result);
+      onLibraryChanged();
     } catch (e) {
-      setError(String(e));
+      setScanError(String(e));
     } finally {
       setScanning(false);
+    }
+  }
+
+  async function analyzeLibrary() {
+    setAnalyzeError(null);
+    setAnalyzeSummary(null);
+    setAnalyzeProgress(null);
+    setAnalyzing(true);
+    try {
+      const result = await invoke<AnalyzeSummary>("analyze_library");
+      setAnalyzeSummary(result);
+      onLibraryChanged();
+    } catch (e) {
+      setAnalyzeError(String(e));
+    } finally {
+      setAnalyzing(false);
     }
   }
 
@@ -65,45 +90,97 @@ export function SettingsPanel({ open, onClose, onScanComplete }: Props) {
 
           {folder && <p className="folder-path">{folder}</p>}
 
-          {scanning && progress && (
+          {scanning && scanProgress && (
             <div className="progress">
               <div className="progress-bar">
                 <div
                   className="progress-bar-fill"
                   style={{
-                    width: progress.total > 0 ? `${(progress.current / progress.total) * 100}%` : "0%",
+                    width:
+                      scanProgress.total > 0
+                        ? `${(scanProgress.current / scanProgress.total) * 100}%`
+                        : "0%",
                   }}
                 />
               </div>
               <p className="progress-label">
-                {progress.current} / {progress.total} — {progress.current_file}
+                {scanProgress.current} / {scanProgress.total} — {scanProgress.current_file}
               </p>
             </div>
           )}
 
-          {error && <p className="error">{error}</p>}
+          {scanError && <p className="error">{scanError}</p>}
 
-          {summary && (
+          {scanSummary && (
             <div className="summary">
               <div className="summary-row">
                 <span>Files found</span>
-                <span>{summary.files_found}</span>
+                <span>{scanSummary.files_found}</span>
               </div>
               <div className="summary-row">
                 <span>Added</span>
-                <span>{summary.inserted}</span>
+                <span>{scanSummary.inserted}</span>
               </div>
               <div className="summary-row">
                 <span>Updated</span>
-                <span>{summary.updated}</span>
+                <span>{scanSummary.updated}</span>
               </div>
               <div className="summary-row">
                 <span>Possible duplicates</span>
-                <span>{summary.duplicates_found}</span>
+                <span>{scanSummary.duplicates_found}</span>
               </div>
               <div className="summary-row">
                 <span>Errors</span>
-                <span>{summary.errors}</span>
+                <span>{scanSummary.errors}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Analysis</div>
+          <p className="hint">
+            Detect BPM, key, and energy for tracks that haven't been analyzed yet. Runs locally,
+            one track at a time, in the background.
+          </p>
+          <button onClick={analyzeLibrary} disabled={analyzing}>
+            {analyzing ? "Analyzing…" : "Analyze Library"}
+          </button>
+
+          {analyzing && analyzeProgress && (
+            <div className="progress">
+              <div className="progress-bar">
+                <div
+                  className="progress-bar-fill"
+                  style={{
+                    width:
+                      analyzeProgress.total > 0
+                        ? `${(analyzeProgress.current / analyzeProgress.total) * 100}%`
+                        : "0%",
+                  }}
+                />
+              </div>
+              <p className="progress-label">
+                {analyzeProgress.current} / {analyzeProgress.total} — {analyzeProgress.current_file}
+              </p>
+            </div>
+          )}
+
+          {analyzeError && <p className="error">{analyzeError}</p>}
+
+          {analyzeSummary && (
+            <div className="summary">
+              <div className="summary-row">
+                <span>Pending</span>
+                <span>{analyzeSummary.total}</span>
+              </div>
+              <div className="summary-row">
+                <span>Analyzed</span>
+                <span>{analyzeSummary.analyzed}</span>
+              </div>
+              <div className="summary-row">
+                <span>Errors</span>
+                <span>{analyzeSummary.errors}</span>
               </div>
             </div>
           )}

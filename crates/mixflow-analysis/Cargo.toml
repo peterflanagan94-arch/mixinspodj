@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+symphonia = { version = "0.5", features = ["all"] }
+rustfft = "6"
+thiserror = "1"
+
+[dev-dependencies]

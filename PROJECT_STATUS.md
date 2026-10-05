@@ -30,7 +30,7 @@ Short version:
 | M0 | Project scaffold, workspace, SQLite + migrations wired | **Done** |
 | M1 | Folder picker, recursive scan, metadata extraction, dedup | **Done** |
 | — | Compact Live shell (design direction, cross-cutting) | **Done** |
-| M2 | Background BPM/key/energy analysis pipeline | Not started |
+| M2 | Background BPM/key/energy analysis pipeline | **Done** |
 | M3 | Library browser UI | Not started |
 | M4 | NOW PLAYING manual select / drag-in | Not started |
 | M5 | Recommendation engine wired to UI | Not started |
@@ -188,6 +188,59 @@ with honest `—` BPM/key, searched and selected a track into NOW PLAYING
 confirmed the COPY button actually writes to the system clipboard (read
 back via the OS clipboard, not assumed), and toggled Always-On-Top and
 confirmed the icon's color state on the real rendered pixels.
+
+## M2 — what's actually here
+
+Real BPM/key/energy/danceability analysis, no external model, no Essentia
+(AGPL — incompatible with closed-source distribution), all classic MIR
+DSP implemented directly in `mixflow-analysis`:
+
+- **Decode** (`decode.rs`): `symphonia` (mp3/flac/wav/m4a/aac/ogg/aiff via
+  the `all` feature), downmixed to mono f32 PCM.
+- **BPM** (`onset.rs` + `tempo.rs`): spectral-flux onset detection
+  function (windowed FFT, half-wave-rectified frame-to-frame magnitude
+  increase), then autocorrelation of that function across the lag range
+  for 60-200 BPM to find the dominant beat period. Octave-error
+  correction picks whichever of {bpm, bpm×2, bpm÷2} lands in 80-160 BPM
+  with the strongest autocorrelation there, rather than trusting the raw
+  peak blindly. Confidence = normalized autocorrelation strength.
+- **Key** (`key.rs`): whole-track 12-bin chroma (FFT bins mapped to pitch
+  class via the MIDI/frequency relationship, 80-5000Hz), correlated
+  against all 24 rotated Krumhansl-Kessler major/minor profiles (standard
+  published MIR research data, not copyrighted code — just numeric
+  constants). Winner mapped to the standard Camelot wheel via a verified
+  lookup table (relative major/minor share a number, e.g. C=8B/Am=8A).
+- **Energy / danceability** (`energy.rs`): explainable, tunable composite
+  — loudness (RMS) + spectral centroid (brightness) + onset density +
+  tempo, documented weights, explicitly labeled as a starting heuristic
+  to retune later, not a calibrated model. Danceability: BPM-in-range +
+  BPM confidence.
+- New `mixflow-db::library` functions: `tracks_needing_analysis` (anything
+  with `analyzed_at IS NULL`) and `save_analysis` (writes `tracks` headline
+  fields + `audio_features` raw components).
+- New Tauri command `analyze_library`: processes pending tracks
+  sequentially (not parallel — bounded CPU use over raw speed, per the
+  "never peg the CPU during a live gig" principle), streaming
+  `analysis-progress` events; wired into Settings next to the scan flow.
+
+**Tested two ways**, not just one:
+1. Unit tests (8, all passing) against synthetic signals with known
+   ground truth: click tracks at 128/90 BPM, a C-major and an A-minor
+   triad, and an energy ordering check — these pin the *algorithms*
+   correct in isolation.
+2. Live end-to-end verification against real files on disk: generated
+   three WAV files (kick pulses at a known BPM + a sustained chord at a
+   known key, real ID3 tags), scanned and analyzed them through the
+   actual Settings UI in the built `.app`, and checked the result both in
+   the UI and directly in SQLite. Detected **120 BPM/8B** (target 120/C
+   major, exact), **128 BPM/8A** (target 128/A minor, exact), and **99
+   BPM/9B** (target 100/G major — within 1 BPM, correct key) — this is
+   what actually proves the full decode→DSP→persist pipeline works, since
+   the unit tests never touch `symphonia` decoding or the Tauri command
+   layer.
+
+`mixflow-analysis`: 8/8 tests passing. `mixflow-db`: 8/8 (2 new, covering
+the analysis repository functions).
 
 ## How to run it
 

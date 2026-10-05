@@ -23,6 +23,18 @@ export type ScanSummary = {
   errors: number;
 };
 
+export type AnalyzeProgress = {
+  current: number;
+  total: number;
+  current_file: string;
+};
+
+export type AnalyzeSummary = {
+  total: number;
+  analyzed: number;
+  errors: number;
+};
+
 export const DIRECTION_MODES = ["KEEP", "BUILD", "COOL", "SWITCH", "RESCUE"] as const;
 export type DirectionMode = (typeof DIRECTION_MODES)[number];
 
