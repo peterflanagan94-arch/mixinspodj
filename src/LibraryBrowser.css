@@ -105,7 +105,9 @@ body {
 }
 
 .library-table tbody tr {
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .library-table tbody tr:hover {

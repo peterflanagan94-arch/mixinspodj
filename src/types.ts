@@ -15,6 +15,12 @@ export type TrackSummary = {
   missing_file: boolean;
 };
 
+/** Drag-and-drop payload key for "this track" — used to drag a row from
+ * the NEXT list (or the Library window) onto the NOW PLAYING card. Native
+ * HTML5 DnD, so it works across the two separate Tauri windows too, since
+ * the OS — not React — owns the drag session. */
+export const TRACK_DRAG_MIME = "application/x-mixinspodj-track-id";
+
 export type TrackMetadataInput = {
   track_id: number;
   title: string | null;

@@ -32,11 +32,17 @@ Short version:
 | — | Compact Live shell (design direction, cross-cutting) | **Done** |
 | M2 | Background BPM/key/energy analysis pipeline | **Done** |
 | M3 | Library browser UI | **Done** |
-| M4 | NOW PLAYING manual select / drag-in | Not started |
+| M4 | NOW PLAYING manual select / drag-in | **Done**¹ |
 | M5 | Recommendation engine wired to UI | Not started |
 | M6 | Mode buttons (Keep Dancing / Build Energy / etc.) | Not started |
 | M7 | Play tracking, already-played detection | Not started |
 | M8 | Local backups, crash recovery, QA pass, tag v0.1 | Not started |
+
+¹ Manual select (search → pick) is fully verified live. Drag-in is
+implemented correctly per the web drag-and-drop standard and a real CSS
+bug it surfaced is fixed, but the actual drop was never confirmed
+succeeding under automation — see the M4 section below before trusting
+it works.
 
 Explicitly postponed past 0.1: GET MUSIC acquisition providers, PREP/event
 module, Transition Finder, Crowd Mode, DJ-software integrations,
@@ -292,6 +298,44 @@ confirmed that track — and only that track — showed up dimmed red in the
 table, proving the missing-file flag is real, not decorative.
 
 `mixflow-db`: 10/10 tests (1 new, for the missing-file re-scan behavior).
+
+## M4 — what's actually here
+
+Manual select (search → pick a track → it becomes NOW PLAYING) was
+already built as part of the Compact Live shell and is fully verified —
+nothing new there. What M4 adds is **drag-in**: the `⋮⋮` handle on every
+NEXT row was purely decorative until now (documented as such); it's a
+real HTML5 drag source now, and NOW PLAYING is a real drop target
+(`TRACK_DRAG_MIME` in `types.ts`). Library window rows are draggable too,
+so in principle you can drag a track from the Library window onto NOW
+PLAYING in the Live window — native drag-and-drop is an OS-level session,
+not a React one, so cross-window isn't extra work once in-window works.
+
+**What's actually confirmed vs. not**, honestly:
+
+- Implementation follows the standard web drag-and-drop API exactly the
+  way countless real apps do it — `draggable`, `dragstart` sets a typed
+  payload, the drop target's `dragover`/`drop` read it back.
+- Testing this surfaced a **real bug**, not a testing artifact: the
+  draggable rows had no `user-select: none`, so a real user clicking and
+  dragging over the track title would very likely get text selection
+  instead of — or fighting with — a drag. Fixed in both `App.css` and
+  `LibraryBrowser.css`.
+- What I could **not** get automated confirmation of: the drop actually
+  landing. I tried three different drag mechanisms against the real
+  built `.app` (a single click-drag gesture, a manual mouse-down +
+  incremental mouse-moves + mouse-up sequence, and the dedicated
+  background `app_drag` tool) — none caused NOW PLAYING to update or the
+  dragged track to disappear from NEXT. Native HTML5 drag-and-drop
+  depends on the OS recognizing a genuine drag session, which synthetic
+  input tools are well known to struggle triggering reliably (this is
+  not specific to this app or this tool — it's a longstanding, broadly
+  documented limitation of UI automation generally). The click-based
+  fallback paths all kept working correctly throughout every attempt,
+  which at least rules out the drag code having broken anything else.
+- **This needs a human with a real mouse or trackpad to confirm before
+  it's trusted as working.** Flagging this explicitly rather than
+  claiming verification I don't actually have.
 
 ## How to run it
 

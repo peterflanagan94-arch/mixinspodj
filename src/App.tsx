@@ -51,6 +51,16 @@ function App() {
     await getCurrentWindow().minimize();
   }
 
+  async function handleDropTrack(trackId: number) {
+    setNowPlayingId(trackId);
+    // A track dragged in from the Library window might not be in this
+    // window's in-memory list yet (e.g. it was just scanned there) —
+    // refresh so the card doesn't show empty while nowPlayingId is set.
+    if (!tracks.some((t) => t.id === trackId)) {
+      await refreshTracks();
+    }
+  }
+
   async function openLibrary() {
     const existing = await WebviewWindow.getByLabel("library");
     if (existing) {
@@ -83,7 +93,7 @@ function App() {
         onChangeEventContext={setEventContext}
       />
 
-      <NowPlaying track={nowPlaying} onPick={() => setSearchOpen(true)} />
+      <NowPlaying track={nowPlaying} onPick={() => setSearchOpen(true)} onDropTrack={handleDropTrack} />
 
       <ModeRow active={activeMode} onSelect={setActiveMode} />
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { TrackMetadataInput, TrackSummary } from "./types";
+import { TrackMetadataInput, TrackSummary, TRACK_DRAG_MIME } from "./types";
 import "./LibraryBrowser.css";
 
 type SortField =
@@ -126,6 +126,11 @@ export default function LibraryBrowser() {
                 className={track.missing_file ? "row-missing" : ""}
                 onClick={() => setEditing(track)}
                 title={track.missing_file ? "File not found at last scan" : undefined}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(TRACK_DRAG_MIME, String(track.id));
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
               >
                 <td>{track.title ?? "—"}</td>
                 <td>{track.artist ?? "—"}</td>

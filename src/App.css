@@ -126,6 +126,13 @@ button {
   text-align: center;
 }
 
+.now-playing-drag-over {
+  border-left-color: var(--cyan);
+  background: var(--cyan-wash);
+  box-shadow: inset 0 0 0 1px var(--cyan);
+  color: var(--cyan);
+}
+
 .now-playing-label {
   font-size: 9px;
   font-weight: 700;
@@ -243,6 +250,13 @@ button {
   padding: 6px 6px;
   border-radius: 4px;
   margin-bottom: 2px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.track-row:active {
+  cursor: grabbing;
 }
 
 .track-row:hover {
