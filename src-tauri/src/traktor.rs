@@ -17,7 +17,7 @@ use tauri::{AppHandle, Manager};
 use walkdir::WalkDir;
 
 use crate::library_scan::{extract_track, is_audio_file, is_cloud_only};
-use crate::DbState;
+use crate::{settings, DbState};
 
 /// The collection file's modified time at the last import, so an unchanged
 /// file is not parsed again on every watch tick.
@@ -42,8 +42,19 @@ pub struct CollectionEntry {
     pub key: Option<String>,
 }
 
-/// The newest `collection.nml` under the usual Traktor folders, if any.
-pub fn find_collection() -> Option<PathBuf> {
+/// The collection to import from: the one the user chose, if it still exists,
+/// otherwise the newest `collection.nml` under the usual Traktor folders.
+pub fn find_collection(app: &AppHandle) -> Option<PathBuf> {
+    if let Some(chosen) = settings::load(app).traktor_collection {
+        let path = PathBuf::from(chosen);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    newest_default_collection()
+}
+
+fn newest_default_collection() -> Option<PathBuf> {
     let home = PathBuf::from(std::env::var_os("HOME")?);
     ["Documents/Native Instruments", "Music/Native Instruments"]
         .iter()
@@ -67,7 +78,7 @@ pub fn find_collection() -> Option<PathBuf> {
 /// Imports the collection if it has changed since the last import. Returns
 /// the summary when an import ran, so the caller can refresh the UI.
 pub fn import_if_changed(app: &AppHandle) -> Option<ImportSummary> {
-    let nml = find_collection()?;
+    let nml = find_collection(app)?;
     let modified = fs::metadata(&nml).ok()?.modified().ok()?;
     if *LAST_IMPORT.lock().ok()? == Some(modified) {
         return None;
@@ -77,9 +88,36 @@ pub fn import_if_changed(app: &AppHandle) -> Option<ImportSummary> {
     Some(summary)
 }
 
+/// The collection file the app is importing from, chosen or automatic.
+#[tauri::command]
+pub fn active_traktor_collection(app: AppHandle) -> Option<String> {
+    find_collection(&app).map(|p| p.to_string_lossy().into_owned())
+}
+
+/// Lets the user pick a Traktor collection file, remembers it, and resets the
+/// import so the new file is read on the next import. Runs on the main thread,
+/// because the file dialog has to.
+#[tauri::command]
+pub fn choose_traktor_collection(app: AppHandle) -> Result<Option<String>, String> {
+    let Some(picked) = rfd::FileDialog::new()
+        .set_title("Choose your Traktor collection")
+        .add_filter("Traktor collection", &["nml"])
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+    let mut current = settings::load(&app);
+    current.traktor_collection = Some(picked.to_string_lossy().into_owned());
+    settings::save(&app, &current)?;
+    if let Ok(mut last) = LAST_IMPORT.lock() {
+        *last = None;
+    }
+    Ok(current.traktor_collection)
+}
+
 #[tauri::command(async)]
 pub fn import_traktor_collection(app: AppHandle) -> Result<ImportSummary, String> {
-    let nml = find_collection().ok_or_else(|| "No Traktor collection.nml found".to_string())?;
+    let nml = find_collection(&app).ok_or_else(|| "No Traktor collection file found".to_string())?;
     let summary = import_collection(&app, &nml)?;
     if let Ok(modified) = fs::metadata(&nml).and_then(|m| m.modified()) {
         if let Ok(mut last) = LAST_IMPORT.lock() {
@@ -97,6 +135,7 @@ fn import_collection(app: &AppHandle, nml: &Path) -> Result<ImportSummary, Strin
         ..Default::default()
     };
 
+    eprintln!("traktor import: {} entries from {}", entries.len(), nml.display());
     for entry in entries {
         let Some(path) = entry.path else { continue };
         if !Path::new(&path).is_file() {
@@ -107,7 +146,13 @@ fn import_collection(app: &AppHandle, nml: &Path) -> Result<ImportSummary, Strin
         let track_id = {
             let db = app.state::<DbState>();
             let conn = db.0.lock().map_err(|e| e.to_string())?;
-            library::find_track_id_by_path(&conn, &path).map_err(|e| e.to_string())?
+            match library::find_track_id_by_path(&conn, &path) {
+                Ok(id) => id,
+                Err(e) => {
+                    eprintln!("traktor import: lookup failed for {path}: {e}");
+                    return Err(e.to_string());
+                }
+            }
         };
         let track_id = match track_id {
             Some(id) => id,
@@ -117,7 +162,13 @@ fn import_collection(app: &AppHandle, nml: &Path) -> Result<ImportSummary, Strin
                 if !is_audio_file(Path::new(&path)) || is_cloud_only(Path::new(&path)) {
                     continue;
                 }
-                let Ok(new_track) = extract_track(Path::new(&path)) else { continue };
+                let new_track = match extract_track(Path::new(&path)) {
+                    Ok(track) => track,
+                    Err(e) => {
+                        eprintln!("traktor import: could not read {path}: {e}");
+                        continue;
+                    }
+                };
                 let db = app.state::<DbState>();
                 let conn = db.0.lock().map_err(|e| e.to_string())?;
                 match library::upsert_track(&conn, &new_track) {
@@ -131,19 +182,22 @@ fn import_collection(app: &AppHandle, nml: &Path) -> Result<ImportSummary, Strin
             }
         };
 
-        let (Some(bpm), Some((pitch_class, is_major))) =
-            (entry.bpm, entry.key.as_deref().and_then(pitch_for_traktor_key))
-        else {
-            continue;
-        };
-        let (key_name, camelot) = key_for(pitch_class, is_major);
+        let Some(bpm) = entry.bpm else { continue };
+        let key = entry
+            .key
+            .as_deref()
+            .and_then(pitch_for_traktor_key)
+            .map(|(pitch_class, is_major)| key_for(pitch_class, is_major));
         let db = app.state::<DbState>();
-        let conn = db.0.lock().map_err(|e| e.to_string())?;
-        library::apply_traktor_tempo(&conn, track_id, bpm, &key_name, &camelot)
-            .map_err(|e| e.to_string())?;
-        summary.tempo_applied += 1;
+        // One track failing to update shouldn't stop the rest of the collection.
+        let Ok(conn) = db.0.lock() else { continue };
+        let key_ref = key.as_ref().map(|(name, camelot)| (name.as_str(), camelot.as_str()));
+        if library::apply_traktor_tempo(&conn, track_id, bpm, key_ref).is_ok() {
+            summary.tempo_applied += 1;
+        }
     }
 
+    eprintln!("traktor import done: {summary:?}");
     Ok(summary)
 }
 
@@ -178,13 +232,32 @@ fn location_to_path(location: &str) -> Option<String> {
 }
 
 /// A Traktor key as (pitch class 0=C..11=B, is_major). Traktor writes keys
-/// either as note names ("Ebm", "F#") or in Open Key notation ("6m", "4d").
+/// as note names ("Ebm", "F#"), in Open Key notation ("6m", "4d"), or directly
+/// as Camelot codes ("8A", "11B").
 pub fn pitch_for_traktor_key(name: &str) -> Option<(usize, bool)> {
     let name = name.trim();
     if name.starts_with(|c: char| c.is_ascii_digit()) {
-        return open_key_pitch(name);
+        return match name.chars().last()? {
+            'A' | 'B' => camelot_pitch(name),
+            _ => open_key_pitch(name),
+        };
     }
     note_name_pitch(name)
+}
+
+/// The pitch for a Camelot code such as "8A" or "11B".
+fn camelot_pitch(code: &str) -> Option<(usize, bool)> {
+    let is_major = match code.chars().last()? {
+        'B' => true,
+        'A' => false,
+        _ => return None,
+    };
+    let number: u32 = code[..code.len() - 1].parse().ok()?;
+    if !(1..=12).contains(&number) {
+        return None;
+    }
+    let camelot = format!("{number}{}", if is_major { 'B' } else { 'A' });
+    (0..12).find(|&pc| key_for(pc, is_major).1 == camelot).map(|pc| (pc, is_major))
 }
 
 /// Open Key numbers run 7 steps ahead of Camelot: "1d" is 8B (C major) and
@@ -291,6 +364,13 @@ mod tests {
         assert_eq!(pitch_for_traktor_key("F#"), Some((6, true)));
         assert_eq!(pitch_for_traktor_key("Cm"), Some((0, false)));
         assert_eq!(pitch_for_traktor_key("Xq"), None);
+    }
+
+    #[test]
+    fn camelot_codes_are_read_directly() {
+        assert_eq!(pitch_for_traktor_key("8A"), Some((9, false)));
+        assert_eq!(pitch_for_traktor_key("11B"), Some((9, true)));
+        assert_eq!(pitch_for_traktor_key("13A"), None);
     }
 
     #[test]

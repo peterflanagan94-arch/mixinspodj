@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { AnalyzeProgress, AnalyzeSummary, ScanProgress, ScanSummary, TraktorStatus } from "../types";
+import {
+  AnalyzeProgress,
+  AnalyzeSummary,
+  ImportSummary,
+  ScanProgress,
+  ScanSummary,
+  TraktorStatus,
+} from "../types";
 
 type Props = {
   open: boolean;
@@ -18,6 +25,29 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
   const [scanError, setScanError] = useState<string | null>(null);
 
   const [watchedFolders, setWatchedFolders] = useState<string[]>([]);
+  const [traktorCollection, setTraktorCollection] = useState<string | null>(null);
+  const [traktorImport, setTraktorImport] = useState<ImportSummary | null>(null);
+
+  async function loadTraktorCollection() {
+    try {
+      setTraktorCollection(await invoke<string | null>("active_traktor_collection"));
+    } catch (e) {
+      setScanError(String(e));
+    }
+  }
+
+  async function chooseTraktorCollection() {
+    setScanError(null);
+    try {
+      const picked = await invoke<string | null>("choose_traktor_collection");
+      if (!picked) return;
+      setTraktorCollection(picked);
+      setTraktorImport(await invoke<ImportSummary>("import_traktor_collection"));
+      onLibraryChanged();
+    } catch (e) {
+      setScanError(String(e));
+    }
+  }
 
   async function loadWatchedFolders() {
     try {
@@ -34,7 +64,10 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
   }
 
   useEffect(() => {
-    if (open) void loadWatchedFolders();
+    if (open) {
+      void loadWatchedFolders();
+      void loadTraktorCollection();
+    }
   }, [open]);
 
   const [analyzeProgress, setAnalyzeProgress] = useState<AnalyzeProgress | null>(null);
@@ -235,6 +268,19 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
               <strong>{traktorStatus?.address ?? "127.0.0.1"}</strong>, Port{" "}
               <strong>{traktorStatus?.port ?? 8765}</strong>, Mount path <strong>/mixinspo</strong>,
               Password <strong>mixinspo</strong>. Then turn Broadcasting on.
+            </p>
+          )}
+          <p className="hint">
+            Collection:{" "}
+            <strong>{traktorCollection ?? "none found"}</strong>
+          </p>
+          <button type="button" onClick={() => void chooseTraktorCollection()}>
+            Choose Traktor collection…
+          </button>
+          {traktorImport && (
+            <p className="hint">
+              Imported {traktorImport.tempo_applied} tracks&apos; BPM and key
+              {traktorImport.indexed > 0 ? `, added ${traktorImport.indexed} new files` : ""}.
             </p>
           )}
           <p className="hint">

@@ -137,9 +137,13 @@ pub(crate) fn is_audio_file(path: &Path) -> bool {
 pub(crate) fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error::Error>> {
     let file_hash = hash_file(path)?;
 
-    let tagged_file = Probe::open(path)?.read()?;
-    let properties = tagged_file.properties();
-    let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
+    // Some WAV files have INFO chunks the tag reader rejects. Those still get
+    // indexed, from their file name, rather than being skipped.
+    let tagged_file = Probe::open(path).ok().and_then(|probe| probe.read().ok());
+    let properties = tagged_file.as_ref().map(|f| f.properties().clone());
+    let tag = tagged_file
+        .as_ref()
+        .and_then(|f| f.primary_tag().or_else(|| f.first_tag()));
 
     let tagged_title = tag.and_then(|t| t.get_string(&ItemKey::TrackTitle)).map(str::to_owned);
     let tagged_artist = tag.and_then(|t| t.get_string(&ItemKey::TrackArtist)).map(str::to_owned);
@@ -163,9 +167,9 @@ pub(crate) fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error:
         album,
         genre,
         year,
-        duration_ms: Some(properties.duration().as_millis() as i64),
-        bitrate: properties.audio_bitrate().map(|b| b as i32),
-        sample_rate: properties.sample_rate().map(|s| s as i32),
+        duration_ms: properties.as_ref().map(|p| p.duration().as_millis() as i64),
+        bitrate: properties.as_ref().and_then(|p| p.audio_bitrate()).map(|b| b as i32),
+        sample_rate: properties.as_ref().and_then(|p| p.sample_rate()).map(|s| s as i32),
         file_format: path.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()),
     })
 }

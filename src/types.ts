@@ -106,3 +106,10 @@ export type TraktorStatus = {
   address: string;
   port: number;
 };
+
+export type ImportSummary = {
+  entries: number;
+  tempo_applied: number;
+  indexed: number;
+  missing_files: number;
+};

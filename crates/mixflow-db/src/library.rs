@@ -216,18 +216,25 @@ pub fn tracks_needing_analysis(conn: &Connection) -> Result<Vec<TrackForAnalysis
 
 /// Sets BPM, key and Camelot code from Traktor's collection. These replace
 /// any estimate and are marked so later analysis leaves them alone.
+/// `key` is (key name, Camelot code) when Traktor has one; a track with only a
+/// BPM keeps analysis's key until analysis fills it in.
 pub fn apply_traktor_tempo(
     conn: &Connection,
     track_id: i64,
     bpm: f32,
-    key: &str,
-    camelot_key: &str,
+    key: Option<(&str, &str)>,
 ) -> Result<(), DbError> {
-    conn.execute(
-        "UPDATE tracks SET bpm = ?1, key = ?2, camelot_key = ?3, tempo_source = 'traktor' \
-         WHERE id = ?4",
-        params![bpm, key, camelot_key, track_id],
-    )?;
+    match key {
+        Some((key_name, camelot_key)) => conn.execute(
+            "UPDATE tracks SET bpm = ?1, key = ?2, camelot_key = ?3, tempo_source = 'traktor' \
+             WHERE id = ?4",
+            params![bpm, key_name, camelot_key, track_id],
+        )?,
+        None => conn.execute(
+            "UPDATE tracks SET bpm = ?1, tempo_source = 'traktor' WHERE id = ?2",
+            params![bpm, track_id],
+        )?,
+    };
     Ok(())
 }
 
@@ -280,8 +287,9 @@ pub fn save_analysis(conn: &Connection, update: &AnalysisUpdate) -> Result<(), D
         "UPDATE tracks SET \
             bpm = CASE WHEN tempo_source = 'traktor' THEN bpm ELSE ?1 END, \
             bpm_confidence = ?2, \
-            key = CASE WHEN tempo_source = 'traktor' THEN key ELSE ?3 END, \
-            camelot_key = CASE WHEN tempo_source = 'traktor' THEN camelot_key ELSE ?4 END, \
+            key = CASE WHEN tempo_source = 'traktor' AND key IS NOT NULL THEN key ELSE ?3 END, \
+            camelot_key = CASE WHEN tempo_source = 'traktor' AND camelot_key IS NOT NULL \
+                THEN camelot_key ELSE ?4 END, \
             energy = ?5, danceability = ?6, analyzed_at = datetime('now') \
          WHERE id = ?7",
         params![
@@ -576,7 +584,7 @@ mod tempo_tests {
     fn traktor_tempo_survives_later_analysis() {
         let conn = connect_in_memory().unwrap();
         let id = insert(&conn, "/music/a.mp3", "h1");
-        apply_traktor_tempo(&conn, id, 136.0, "Ebm", "2A").unwrap();
+        apply_traktor_tempo(&conn, id, 136.0, Some(("Ebm", "2A"))).unwrap();
 
         save_analysis(&conn, &analysis(id)).unwrap();
 
@@ -615,5 +623,60 @@ mod tempo_tests {
         assert_eq!(next_track_needing_analysis(&conn, &exclude).unwrap().unwrap().id, second);
         exclude.insert(second);
         assert!(next_track_needing_analysis(&conn, &exclude).unwrap().is_none());
+    }
+}
+
+#[cfg(test)]
+mod traktor_bpm_only_tests {
+    use super::*;
+    use crate::connect_in_memory;
+
+    #[test]
+    fn a_bpm_without_a_key_keeps_the_key_analysis_later_finds() {
+        let conn = connect_in_memory().unwrap();
+        let track = NewTrack {
+            file_path: "/music/e.mp3".to_string(),
+            file_hash: "h5".to_string(),
+            title: None,
+            artist: None,
+            album: None,
+            genre: None,
+            year: None,
+            duration_ms: None,
+            bitrate: None,
+            sample_rate: None,
+            file_format: Some("mp3".to_string()),
+        };
+        let id = match upsert_track(&conn, &track).unwrap() {
+            UpsertOutcome::Inserted { track_id } => track_id,
+            other => panic!("expected Inserted, got {other:?}"),
+        };
+        apply_traktor_tempo(&conn, id, 128.0, None).unwrap();
+        save_analysis(
+            &conn,
+            &AnalysisUpdate {
+                track_id: id,
+                bpm: 120.0,
+                bpm_confidence: 0.5,
+                key: "C".to_string(),
+                camelot_key: "8B".to_string(),
+                energy: 5.0,
+                danceability: 0.5,
+                loudness_rms: 0.1,
+                spectral_centroid: 2000.0,
+                onset_density: 3.0,
+            },
+        )
+        .unwrap();
+
+        let (bpm, camelot): (f64, String) = conn
+            .query_row(
+                "SELECT bpm, camelot_key FROM tracks WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(bpm, 128.0, "Traktor's BPM stays");
+        assert_eq!(camelot, "8B", "analysis fills the missing key");
     }
 }

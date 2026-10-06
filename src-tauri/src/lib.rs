@@ -6,6 +6,7 @@ mod broadcast;
 mod library_scan;
 mod plays;
 mod recommend;
+mod settings;
 mod tracks;
 mod traktor;
 mod watch;
@@ -101,6 +102,8 @@ pub fn run() {
             analysis::analyze_library,
             analysis::analyze_track,
             traktor::import_traktor_collection,
+            traktor::active_traktor_collection,
+            traktor::choose_traktor_collection,
             watch::list_watched_folders,
             watch::remove_watched_folder,
             recommend::recommend_next,

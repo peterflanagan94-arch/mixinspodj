@@ -32,6 +32,9 @@ fn migrations() -> Migrations<'static> {
 /// its schema up to date.
 pub fn connect(path: impl AsRef<Path>) -> Result<Connection, DbError> {
     let mut conn = Connection::open(path)?;
+    // Wait briefly for a competing reader or writer (another tool, or the app's
+    // own background threads) instead of failing the write straight away.
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
     migrations().to_latest(&mut conn)?;
     Ok(conn)
 }
