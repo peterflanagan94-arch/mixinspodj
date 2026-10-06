@@ -73,9 +73,10 @@ fn app_set_document(conn: &Connection, session_id: i64) -> Result<SetDocument, S
     let plays = plays::session_plays(conn, session_id).map_err(|e| e.to_string())?;
     let started = plays
         .first()
-        .map(|p| p.played_at.clone())
+        .map(|p| friendly_timestamp(&p.played_at))
         .unwrap_or_else(|| "No plays".to_string());
     let total: i64 = plays.iter().filter_map(|p| p.est_seconds).sum();
+    let known = plays.iter().filter(|p| p.est_seconds.is_some()).count();
     let suggested = plays.iter().filter(|p| p.source == "recommended").count();
     let share = if plays.is_empty() {
         0
@@ -99,10 +100,10 @@ fn app_set_document(conn: &Connection, session_id: i64) -> Result<SetDocument, S
 
     Ok(SetDocument {
         title: format!("Set · {started}"),
-        subtitle: format!("{} tracks played in MixInspo", plays.len()),
+        subtitle: format!("{} played in MixInspo", count_tracks(plays.len())),
         stats: vec![
             ("Tracks".into(), plays.len().to_string()),
-            ("Playing time".into(), minutes(total)),
+            ("Playing time".into(), if known == 0 { "—".into() } else { minutes(total) }),
             ("From suggestions".into(), format!("{share}%")),
             ("Most played".into(), most),
         ],
@@ -146,7 +147,7 @@ fn traktor_set_document(conn: &Connection, set_id: i64) -> Result<SetDocument, S
 
     Ok(SetDocument {
         title: format!("Traktor session · {when}"),
-        subtitle: format!("{} tracks, from Traktor's own history", plays.len()),
+        subtitle: format!("{}, from Traktor's own history", count_tracks(plays.len())),
         stats: vec![
             ("Tracks".into(), plays.len().to_string()),
             ("Playing time".into(), minutes(total.round() as i64)),
@@ -194,6 +195,28 @@ fn minutes(seconds: i64) -> String {
 
 fn clock(seconds_since_midnight: i64) -> String {
     format!("{:02}:{:02}", (seconds_since_midnight / 3600) % 24, (seconds_since_midnight % 3600) / 60)
+}
+
+/// "6 tracks" or "1 track".
+fn count_tracks(n: usize) -> String {
+    if n == 1 {
+        "1 track".into()
+    } else {
+        format!("{n} tracks")
+    }
+}
+
+/// "2026-10-06 08:27:07" becomes "6 Oct 2026, 08:27".
+fn friendly_timestamp(timestamp: &str) -> String {
+    let parts: Vec<&str> = timestamp.split(|c| c == '-' || c == ' ' || c == ':').collect();
+    if parts.len() < 5 {
+        return timestamp.to_string();
+    }
+    let month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        .get(parts[1].parse::<usize>().unwrap_or(0).saturating_sub(1))
+        .copied()
+        .unwrap_or("");
+    format!("{} {} {}, {}:{}", parts[2].trim_start_matches('0'), month, parts[0], parts[3], parts[4])
 }
 
 /// "2026-10-06 20:15:03" becomes "20:15".
@@ -394,6 +417,13 @@ mod tests {
     }
 
     #[test]
+    fn timestamps_and_counts_read_naturally() {
+        assert_eq!(friendly_timestamp("2026-10-06 08:27:07"), "6 Oct 2026, 08:27");
+        assert_eq!(count_tracks(1), "1 track");
+        assert_eq!(count_tracks(3), "3 tracks");
+    }
+
+    #[test]
     fn clock_and_minutes_format() {
         assert_eq!(clock(29293), "08:08");
         assert_eq!(minutes(216), "3:36");
@@ -426,3 +456,4 @@ mod tests {
         assert!(bytes.starts_with(b"%PDF"), "output should be a PDF");
     }
 }
+
