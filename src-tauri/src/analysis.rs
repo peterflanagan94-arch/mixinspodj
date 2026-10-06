@@ -1,11 +1,22 @@
+use std::collections::HashSet;
 use std::path::Path;
+use std::thread::sleep;
+use std::time::Duration;
 
-use mixflow_analysis::analyze_file;
+use mixflow_analysis::{analyze_file, AnalysisResult};
 use mixflow_db::library::{self, AnalysisUpdate};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::DbState;
+use crate::library_scan::is_cloud_only;
+use crate::{broadcast, DbState};
+
+/// Pause between background tracks, so analysis never saturates the machine.
+const BACKGROUND_GAP: Duration = Duration::from_secs(2);
+/// How often to look again while Traktor is broadcasting (a set may be live).
+const LIVE_RECHECK: Duration = Duration::from_secs(30);
+/// How often to look for new unanalysed tracks once the library is done.
+const IDLE_RECHECK: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AnalyzeProgress {
@@ -54,20 +65,14 @@ pub fn analyze_library(app: AppHandle, db: State<DbState>) -> Result<AnalyzeSumm
             },
         );
 
+        if is_cloud_only(path) {
+            summary.errors += 1;
+            continue;
+        }
+
         match analyze_file(path) {
             Ok(result) => {
-                let update = AnalysisUpdate {
-                    track_id: track.id,
-                    bpm: result.bpm,
-                    bpm_confidence: result.bpm_confidence,
-                    key: result.key,
-                    camelot_key: result.camelot_key,
-                    energy: result.energy,
-                    danceability: result.danceability,
-                    loudness_rms: result.loudness_rms,
-                    spectral_centroid: result.spectral_centroid,
-                    onset_density: result.onset_density,
-                };
+                let update = update_from(track.id, result);
                 let conn = db.0.lock().map_err(|e| e.to_string())?;
                 match library::save_analysis(&conn, &update) {
                     Ok(()) => summary.analyzed += 1,
@@ -106,8 +111,16 @@ pub fn analyze_track(db: State<DbState>, track_id: i64) -> Result<(), String> {
         .map_err(|e| e.to_string())?
     };
 
+    if is_cloud_only(Path::new(&path)) {
+        return Err("This track is only in the cloud. Download it first, then analyse it.".to_string());
+    }
     let result = analyze_file(Path::new(&path)).map_err(|e| e.to_string())?;
-    let update = AnalysisUpdate {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    library::save_analysis(&conn, &update_from(track_id, result)).map_err(|e| e.to_string())
+}
+
+fn update_from(track_id: i64, result: AnalysisResult) -> AnalysisUpdate {
+    AnalysisUpdate {
         track_id,
         bpm: result.bpm,
         bpm_confidence: result.bpm_confidence,
@@ -118,7 +131,56 @@ pub fn analyze_track(db: State<DbState>, track_id: i64) -> Result<(), String> {
         loudness_rms: result.loudness_rms,
         spectral_centroid: result.spectral_centroid,
         onset_density: result.onset_density,
-    };
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
-    library::save_analysis(&conn, &update).map_err(|e| e.to_string())
+    }
+}
+
+/// Analyses unanalysed tracks one at a time in the background, so the library
+/// fills in without anyone pressing Analyze. It pauses while Traktor is
+/// broadcasting, so it never competes with a live set. A track that fails is
+/// skipped for the rest of this run rather than retried endlessly.
+pub fn start_background(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut failed: HashSet<i64> = HashSet::new();
+        loop {
+            if broadcast::is_live() {
+                sleep(LIVE_RECHECK);
+                continue;
+            }
+
+            let next = {
+                let db = app.state::<DbState>();
+                let Ok(conn) = db.0.lock() else {
+                    sleep(IDLE_RECHECK);
+                    continue;
+                };
+                library::next_track_needing_analysis(&conn, &failed)
+            };
+            let Ok(Some(track)) = next else {
+                sleep(IDLE_RECHECK);
+                continue;
+            };
+
+            if is_cloud_only(Path::new(&track.file_path)) {
+                failed.insert(track.id);
+                continue;
+            }
+
+            match analyze_file(Path::new(&track.file_path)) {
+                Ok(result) => {
+                    let db = app.state::<DbState>();
+                    let saved = match db.0.lock() {
+                        Ok(conn) => library::save_analysis(&conn, &update_from(track.id, result)).is_ok(),
+                        Err(_) => false,
+                    };
+                    if !saved {
+                        failed.insert(track.id);
+                    }
+                }
+                Err(_) => {
+                    failed.insert(track.id);
+                }
+            }
+            sleep(BACKGROUND_GAP);
+        }
+    });
 }

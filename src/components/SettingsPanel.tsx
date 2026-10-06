@@ -163,6 +163,10 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
                 <span>{scanSummary.duplicates_found}</span>
               </div>
               <div className="summary-row">
+                <span>In the cloud only (skipped)</span>
+                <span>{scanSummary.cloud_only}</span>
+              </div>
+              <div className="summary-row">
                 <span>Errors</span>
                 <span>{scanSummary.errors}</span>
               </div>

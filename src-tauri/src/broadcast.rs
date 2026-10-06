@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use mixflow_broadcast::{body_start, TrackDetector, TrackTags};
@@ -37,6 +37,14 @@ pub struct TraktorStatus {
     pub port: u16,
 }
 
+static OPEN_CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
+
+/// True while Traktor is broadcasting to us, which is the signal that a set
+/// may be running. Background work holds off while this is true.
+pub fn is_live() -> bool {
+    OPEN_CONNECTIONS.load(Ordering::Relaxed) > 0
+}
+
 /// Starts listening for Traktor on a background thread, so it never blocks the UI.
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
@@ -50,7 +58,11 @@ pub fn start(app: AppHandle) {
         emit_status(&app, "listening");
         for stream in listener.incoming().flatten() {
             let app = app.clone();
-            std::thread::spawn(move || handle(stream, app));
+            std::thread::spawn(move || {
+                OPEN_CONNECTIONS.fetch_add(1, Ordering::Relaxed);
+                handle(stream, app);
+                OPEN_CONNECTIONS.fetch_sub(1, Ordering::Relaxed);
+            });
         }
     });
 }

@@ -2,9 +2,7 @@
 
 ## Connecting Traktor Pro (automatic now-playing)
 
-> Status: setup steps below are the planned final ones. Automatic detection is
-> still being built, so until that ships, set tracks as NOW PLAYING by search
-> or drag.
+Traktor detection works now. The setup steps below are the ones to use.
 
 MixInspo DJ listens for Traktor's **Broadcasting** feature on your own
 machine. Nothing leaves your computer.
@@ -35,6 +33,34 @@ another number in both places also works.
 
 Note: Traktor sends the next track's details when you cue it, so the detected
 track can change slightly before you hear it.
+
+## Using Traktor's BPM and key
+
+MixInspo DJ reads Traktor's own collection file, `collection.nml`, which Traktor
+keeps in `Documents/Native Instruments/Traktor <version>/`. It only reads the
+file; it never changes it.
+
+Traktor writes this file when you save or quit, so the BPM and key come from
+the last save. After you analyse tracks in Traktor and save, they appear in
+MixInspo DJ within about 30 seconds. For those tracks, Traktor's BPM and key
+replace MixInspo DJ's own estimates, and analysis never overwrites them.
+
+Traktor's file also lists tracks that aren't in your watched folders yet. Any
+that are on this computer are added to the library.
+
+## Analysis in the background
+
+MixInspo DJ analyses your library in the background, one track at a time. It
+pauses while Traktor is broadcasting to the app, so it never runs during a live
+set. Analysis is slow on a large library. Use the release build, not a debug
+build, for real sessions.
+
+## Cloud-only files
+
+If a folder is synced by Dropbox (or iCloud) with "online only" files, those
+files aren't on your Mac until you open them. MixInspo DJ skips them, because
+reading one would make the cloud service download it. A track is added once its
+file is downloaded. The scan summary in Settings shows how many were skipped.
 
 ## Keeping your library up to date
 

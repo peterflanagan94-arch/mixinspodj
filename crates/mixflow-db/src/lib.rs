@@ -22,7 +22,10 @@ pub enum DbError {
 }
 
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(include_str!("migrations/0001_init.sql"))])
+    Migrations::new(vec![
+        M::up(include_str!("migrations/0001_init.sql")),
+        M::up(include_str!("migrations/0002_tempo_source.sql")),
+    ])
 }
 
 /// Opens (creating if necessary) the MixInspo DJ database at `path` and brings

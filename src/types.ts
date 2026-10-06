@@ -42,6 +42,7 @@ export type ScanSummary = {
   inserted: number;
   updated: number;
   duplicates_found: number;
+  cloud_only: number;
   errors: number;
 };
 

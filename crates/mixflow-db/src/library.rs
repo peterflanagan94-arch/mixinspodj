@@ -119,7 +119,7 @@ pub fn upsert_track(conn: &Connection, track: &NewTrack) -> Result<UpsertOutcome
     Ok(UpsertOutcome::Inserted { track_id: new_id })
 }
 
-fn find_track_id_by_path(conn: &Connection, file_path: &str) -> Result<Option<i64>, DbError> {
+pub fn find_track_id_by_path(conn: &Connection, file_path: &str) -> Result<Option<i64>, DbError> {
     conn.query_row(
         "SELECT id FROM tracks WHERE file_path = ?1",
         params![file_path],
@@ -214,6 +214,46 @@ pub fn tracks_needing_analysis(conn: &Connection) -> Result<Vec<TrackForAnalysis
     Ok(rows)
 }
 
+/// Sets BPM, key and Camelot code from Traktor's collection. These replace
+/// any estimate and are marked so later analysis leaves them alone.
+pub fn apply_traktor_tempo(
+    conn: &Connection,
+    track_id: i64,
+    bpm: f32,
+    key: &str,
+    camelot_key: &str,
+) -> Result<(), DbError> {
+    conn.execute(
+        "UPDATE tracks SET bpm = ?1, key = ?2, camelot_key = ?3, tempo_source = 'traktor' \
+         WHERE id = ?4",
+        params![bpm, key, camelot_key, track_id],
+    )?;
+    Ok(())
+}
+
+/// The next track still waiting for analysis, skipping any ids in `exclude`
+/// (tracks that already failed this session, so they aren't retried forever).
+pub fn next_track_needing_analysis(
+    conn: &Connection,
+    exclude: &std::collections::HashSet<i64>,
+) -> Result<Option<TrackForAnalysis>, DbError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, file_path FROM tracks WHERE analyzed_at IS NULL AND missing_file = 0 \
+         ORDER BY id",
+    )?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let id: i64 = row.get(0)?;
+        if !exclude.contains(&id) {
+            return Ok(Some(TrackForAnalysis {
+                id,
+                file_path: row.get(1)?,
+            }));
+        }
+    }
+    Ok(None)
+}
+
 #[derive(Debug, Clone)]
 pub struct AnalysisUpdate {
     pub track_id: i64,
@@ -233,9 +273,17 @@ pub struct AnalysisUpdate {
 /// Deliberately takes plain primitives rather than a `mixflow-analysis`
 /// type — this crate has no DSP dependency, and shouldn't need one.
 pub fn save_analysis(conn: &Connection, update: &AnalysisUpdate) -> Result<(), DbError> {
+    // Tempo and key already imported from Traktor stay put: the DJ's own
+    // analysis is only an estimate, and Traktor's values are the ones the
+    // DJ actually mixes by.
     conn.execute(
-        "UPDATE tracks SET bpm = ?1, bpm_confidence = ?2, key = ?3, camelot_key = ?4, \
-         energy = ?5, danceability = ?6, analyzed_at = datetime('now') WHERE id = ?7",
+        "UPDATE tracks SET \
+            bpm = CASE WHEN tempo_source = 'traktor' THEN bpm ELSE ?1 END, \
+            bpm_confidence = ?2, \
+            key = CASE WHEN tempo_source = 'traktor' THEN key ELSE ?3 END, \
+            camelot_key = CASE WHEN tempo_source = 'traktor' THEN camelot_key ELSE ?4 END, \
+            energy = ?5, danceability = ?6, analyzed_at = datetime('now') \
+         WHERE id = ?7",
         params![
             update.bpm,
             update.bpm_confidence,
@@ -480,5 +528,92 @@ mod tests {
         assert_eq!(list_library_folders(&conn).unwrap(), vec!["/music/b"]);
         assert_eq!(count_tracks(&conn).unwrap(), 1);
         assert!(known_track_paths(&conn).unwrap().contains("/music/a/x.flac"));
+    }
+}
+
+#[cfg(test)]
+mod tempo_tests {
+    use super::*;
+    use crate::connect_in_memory;
+    use std::collections::HashSet;
+
+    fn insert(conn: &Connection, path: &str, hash: &str) -> i64 {
+        let track = NewTrack {
+            file_path: path.to_string(),
+            file_hash: hash.to_string(),
+            title: None,
+            artist: None,
+            album: None,
+            genre: None,
+            year: None,
+            duration_ms: None,
+            bitrate: None,
+            sample_rate: None,
+            file_format: Some("mp3".to_string()),
+        };
+        match upsert_track(conn, &track).unwrap() {
+            UpsertOutcome::Inserted { track_id } => track_id,
+            other => panic!("expected Inserted, got {other:?}"),
+        }
+    }
+
+    fn analysis(track_id: i64) -> AnalysisUpdate {
+        AnalysisUpdate {
+            track_id,
+            bpm: 126.0,
+            bpm_confidence: 0.8,
+            key: "C".to_string(),
+            camelot_key: "8B".to_string(),
+            energy: 6.0,
+            danceability: 0.5,
+            loudness_rms: 0.1,
+            spectral_centroid: 2000.0,
+            onset_density: 3.0,
+        }
+    }
+
+    #[test]
+    fn traktor_tempo_survives_later_analysis() {
+        let conn = connect_in_memory().unwrap();
+        let id = insert(&conn, "/music/a.mp3", "h1");
+        apply_traktor_tempo(&conn, id, 136.0, "Ebm", "2A").unwrap();
+
+        save_analysis(&conn, &analysis(id)).unwrap();
+
+        let (bpm, key, camelot): (f64, String, String) = conn
+            .query_row(
+                "SELECT bpm, key, camelot_key FROM tracks WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(bpm, 136.0);
+        assert_eq!(key, "Ebm");
+        assert_eq!(camelot, "2A");
+    }
+
+    #[test]
+    fn analysis_still_fills_tracks_without_traktor_tempo() {
+        let conn = connect_in_memory().unwrap();
+        let id = insert(&conn, "/music/b.mp3", "h2");
+        save_analysis(&conn, &analysis(id)).unwrap();
+        let bpm: f64 = conn
+            .query_row("SELECT bpm FROM tracks WHERE id = ?1", params![id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(bpm, 126.0);
+    }
+
+    #[test]
+    fn excluded_tracks_are_skipped_when_picking_the_next_one() {
+        let conn = connect_in_memory().unwrap();
+        let first = insert(&conn, "/music/c.mp3", "h3");
+        let second = insert(&conn, "/music/d.mp3", "h4");
+
+        let mut exclude = HashSet::new();
+        assert_eq!(next_track_needing_analysis(&conn, &exclude).unwrap().unwrap().id, first);
+        exclude.insert(first);
+        assert_eq!(next_track_needing_analysis(&conn, &exclude).unwrap().unwrap().id, second);
+        exclude.insert(second);
+        assert!(next_track_needing_analysis(&conn, &exclude).unwrap().is_none());
     }
 }

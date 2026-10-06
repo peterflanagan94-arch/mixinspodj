@@ -21,6 +21,8 @@
 mod decode;
 mod energy;
 mod key;
+
+pub use key::key_for;
 mod onset;
 mod spectral;
 mod tempo;

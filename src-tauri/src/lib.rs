@@ -7,6 +7,7 @@ mod library_scan;
 mod plays;
 mod recommend;
 mod tracks;
+mod traktor;
 mod watch;
 
 pub(crate) struct DbState(pub(crate) Mutex<rusqlite::Connection>);
@@ -75,6 +76,7 @@ pub fn run() {
             app.manage(plays::CurrentSession(session_id));
             broadcast::start(app.handle().clone());
             watch::start(app.handle().clone());
+            analysis::start_background(app.handle().clone());
 
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -98,6 +100,7 @@ pub fn run() {
             tracks::update_track_metadata,
             analysis::analyze_library,
             analysis::analyze_track,
+            traktor::import_traktor_collection,
             watch::list_watched_folders,
             watch::remove_watched_folder,
             recommend::recommend_next,

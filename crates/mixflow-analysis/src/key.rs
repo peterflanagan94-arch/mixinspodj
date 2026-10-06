@@ -77,13 +77,7 @@ pub fn estimate_key(samples: &[f32], sample_rate: u32) -> KeyEstimate {
     }
 
     let (pitch_class, is_major, correlation) = best;
-    let key_name = format!("{}{}", NOTE_NAMES[pitch_class], if is_major { "" } else { "m" });
-    let number = if is_major {
-        MAJOR_CAMELOT_NUMBER[pitch_class]
-    } else {
-        MAJOR_CAMELOT_NUMBER[(pitch_class + 3) % 12]
-    };
-    let camelot = format!("{}{}", number, if is_major { "B" } else { "A" });
+    let (key_name, camelot) = key_for(pitch_class, is_major);
 
     KeyEstimate {
         pitch_class,
@@ -92,6 +86,19 @@ pub fn estimate_key(samples: &[f32], sample_rate: u32) -> KeyEstimate {
         camelot,
         correlation,
     }
+}
+
+/// Names a key the way the rest of the app shows it ("C#m", "B") and gives
+/// its Camelot code ("5A", "11B"). `pitch_class` is 0 for C up to 11 for B.
+pub fn key_for(pitch_class: usize, is_major: bool) -> (String, String) {
+    let key_name = format!("{}{}", NOTE_NAMES[pitch_class], if is_major { "" } else { "m" });
+    let number = if is_major {
+        MAJOR_CAMELOT_NUMBER[pitch_class]
+    } else {
+        MAJOR_CAMELOT_NUMBER[(pitch_class + 3) % 12]
+    };
+    let camelot = format!("{}{}", number, if is_major { "B" } else { "A" });
+    (key_name, camelot)
 }
 
 fn rotate(profile: &[f32; 12], root: usize) -> [f32; 12] {

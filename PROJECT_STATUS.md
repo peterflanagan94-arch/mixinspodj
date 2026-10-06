@@ -530,8 +530,11 @@ if a future automated check does the same.
 ## Known gaps / honesty notes
 
 - No CI configured yet.
-- No automatic DJ-software detection yet (Traktor Broadcasting plan is
-  agreed but not built): plays are set by hand.
+- Plays are only recorded as "manual" so far; plays detected from Traktor
+  aren't yet tagged as detected.
+- Cloud-only files (Dropbox "online only") are never read, so tracks that
+  only live in the cloud aren't indexed or analysed until they're downloaded.
+- Background analysis is slow in a debug build; use the release build.
 - Session = one app launch. Plays don't carry across restarts.
 - Recovery and backups have no UI; notices go to the console only.
 - Pushed to no remote; there is no CI.
@@ -576,5 +579,29 @@ can't be matched.
 - **Verified live:** dropped a new tagged file into a watched folder and it was
   indexed within 40 seconds with no manual scan.
 - **Not covered:** a track with no artist tag can't be matched, and a track that
-  never lives on this computer (a stream) has no file to find. Traktor's own
-  collection file isn't read yet.
+  never lives on this computer (a stream) has no file to find.
+
+## Traktor collection, background analysis and cloud files
+
+- **Filename fallback:** a track with no title tag takes its title from the file
+  name. "Artist - Title" also fills in the artist. A leading track number
+  ("07. ") is dropped. Tags always win when present.
+- **Traktor's BPM and key:** Traktor writes each track's tempo and key to
+  `collection.nml` on save or quit, not during a set. The app reads that file
+  (read only) every 30 seconds and, when it has changed, sets BPM and Camelot
+  key on matching tracks, and indexes any Traktor file that isn't in the library
+  yet. Matching is by file path. Traktor's values replace our estimates and are
+  tagged `tempo_source = 'traktor'`, so later analysis never overwrites them.
+  Traktor's Open Key notation ("6m", "4d") is handled as well as note names.
+  Verified against the user's collection: all 14 tracks applied.
+- **Background analysis:** unanalysed tracks are analysed one at a time, two
+  seconds apart. Analysis pauses while Traktor is broadcasting to the app, so
+  it never competes with a live set. A track that fails is skipped for the rest
+  of the run.
+- **Cloud-only files are never read.** macOS marks files that exist only in the
+  cloud (Dropbox "online only"). Reading one makes Dropbox download it, so the
+  scan, the watcher, the Traktor import and analysis all skip them. The scan
+  summary reports how many were skipped.
+- **Not verified:** how long a full library analysis takes in the release build.
+  Debug builds are much slower; the measured rate should be taken from a
+  release run.

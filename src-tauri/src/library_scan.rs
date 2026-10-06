@@ -27,6 +27,8 @@ pub struct ScanSummary {
     pub inserted: usize,
     pub updated: usize,
     pub duplicates_found: usize,
+    /// Files that exist only in the cloud, skipped so they aren't downloaded.
+    pub cloud_only: usize,
     pub errors: usize,
 }
 
@@ -78,6 +80,11 @@ pub fn scan_library_folder(
             },
         );
 
+        if is_cloud_only(path) {
+            summary.cloud_only += 1;
+            continue;
+        }
+
         match extract_track(path) {
             Ok(new_track) => {
                 let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -99,6 +106,27 @@ pub fn scan_library_folder(
     Ok(summary)
 }
 
+/// macOS sets this flag on files that exist only in the cloud (Dropbox,
+/// iCloud "optimise storage" and so on). Reading such a file makes the OS
+/// download it, so MixInspo DJ never reads them on its own.
+#[cfg(target_os = "macos")]
+const SF_DATALESS: u32 = 0x4000_0000;
+
+pub(crate) fn is_cloud_only(path: &Path) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::macos::fs::MetadataExt;
+        std::fs::metadata(path)
+            .map(|m| m.st_flags() & SF_DATALESS != 0)
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        false
+    }
+}
+
 pub(crate) fn is_audio_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
@@ -113,8 +141,13 @@ pub(crate) fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error:
     let properties = tagged_file.properties();
     let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
 
-    let title = tag.and_then(|t| t.get_string(&ItemKey::TrackTitle)).map(str::to_owned);
-    let artist = tag.and_then(|t| t.get_string(&ItemKey::TrackArtist)).map(str::to_owned);
+    let tagged_title = tag.and_then(|t| t.get_string(&ItemKey::TrackTitle)).map(str::to_owned);
+    let tagged_artist = tag.and_then(|t| t.get_string(&ItemKey::TrackArtist)).map(str::to_owned);
+    // Untagged downloads are common, so fall back to the file name for
+    // whichever of artist/title is missing. Tags always win when present.
+    let (name_artist, name_title) = names_from_filename(path);
+    let title = tagged_title.or(name_title);
+    let artist = tagged_artist.or(name_artist);
     let album = tag.and_then(|t| t.get_string(&ItemKey::AlbumTitle)).map(str::to_owned);
     let genre = tag.and_then(|t| t.get_string(&ItemKey::Genre)).map(str::to_owned);
     let year = tag
@@ -137,6 +170,38 @@ pub(crate) fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error:
     })
 }
 
+/// Reads "Artist - Title" (or just "Title") from a file name, dropping a
+/// leading track number such as "01 " or "07. ". Returns (artist, title).
+pub(crate) fn names_from_filename(path: &Path) -> (Option<String>, Option<String>) {
+    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+        return (None, None);
+    };
+    let stem = strip_track_number(stem);
+    if stem.is_empty() {
+        return (None, None);
+    }
+    match stem.split_once(" - ") {
+        Some((artist, title)) if !artist.trim().is_empty() && !title.trim().is_empty() => {
+            (Some(artist.trim().to_string()), Some(title.trim().to_string()))
+        }
+        _ => (None, Some(stem.to_string())),
+    }
+}
+
+/// Removes "07. ", "01 ", "3-" and similar from the start of a name.
+fn strip_track_number(stem: &str) -> &str {
+    let digits = stem.chars().take_while(|c| c.is_ascii_digit()).count();
+    if digits == 0 || digits > 3 {
+        return stem.trim();
+    }
+    let rest = &stem[digits..];
+    let separators = rest.len() - rest.trim_start_matches(|c: char| c == '.' || c == '-' || c == '_' || c.is_whitespace()).len();
+    if separators == 0 {
+        return stem.trim();
+    }
+    rest[separators..].trim()
+}
+
 fn hash_file(path: &Path) -> std::io::Result<String> {
     let mut file = std::fs::File::open(path)?;
     let mut hasher = blake3::Hasher::new();
@@ -149,4 +214,31 @@ fn hash_file(path: &Path) -> std::io::Result<String> {
         hasher.update(&buf[..read]);
     }
     Ok(hasher.finalize().to_hex().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::names_from_filename;
+    use std::path::Path;
+
+    #[test]
+    fn artist_and_title_come_from_dash_separated_name() {
+        let (artist, title) = names_from_filename(Path::new("/m/Higher Place - Diafonie.mp3"));
+        assert_eq!(artist.as_deref(), Some("Higher Place"));
+        assert_eq!(title.as_deref(), Some("Diafonie"));
+    }
+
+    #[test]
+    fn leading_track_number_is_dropped() {
+        let (artist, title) = names_from_filename(Path::new("/m/07. Burial - Archangel.flac"));
+        assert_eq!(artist.as_deref(), Some("Burial"));
+        assert_eq!(title.as_deref(), Some("Archangel"));
+    }
+
+    #[test]
+    fn name_without_separator_is_only_a_title() {
+        let (artist, title) = names_from_filename(Path::new("/m/Untitled Groove.wav"));
+        assert_eq!(artist, None);
+        assert_eq!(title.as_deref(), Some("Untitled Groove"));
+    }
 }

@@ -5,7 +5,7 @@ use mixflow_db::library::{self, UpsertOutcome};
 use tauri::{AppHandle, Emitter, Manager};
 use walkdir::WalkDir;
 
-use crate::library_scan::{extract_track, is_audio_file};
+use crate::library_scan::{extract_track, is_audio_file, is_cloud_only};
 use crate::DbState;
 
 pub const CHECK_INTERVAL_SECS: u64 = 30;
@@ -54,6 +54,10 @@ fn index_folder(app: &AppHandle, folder: &str) -> usize {
 }
 
 fn index_file(app: &AppHandle, path: &Path) -> bool {
+    // Cloud-only files are picked up once they've been downloaded locally.
+    if is_cloud_only(path) {
+        return false;
+    }
     let Ok(new_track) = extract_track(path) else {
         return false;
     };
@@ -71,7 +75,14 @@ fn index_file(app: &AppHandle, path: &Path) -> bool {
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(CHECK_INTERVAL_SECS));
-        if index_watched_folders(&app) > 0 {
+        // Traktor first: its import is quick, while indexing a large or
+        // cloud-synced folder can take minutes.
+        let mut changed = false;
+        if let Some(summary) = crate::traktor::import_if_changed(&app) {
+            changed |= summary.indexed > 0 || summary.tempo_applied > 0;
+        }
+        changed |= index_watched_folders(&app) > 0;
+        if changed {
             let _ = app.emit("library-updated", ());
         }
     });
