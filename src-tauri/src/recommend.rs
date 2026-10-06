@@ -37,8 +37,47 @@ pub fn recommend_next(
     mode: String,
 ) -> Result<Vec<ScoredTrackDto>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
+    score_for(&conn, session.0, now_playing_id, &mode)
+}
 
-    let now_playing = load_features(&conn, now_playing_id)
+/// A random pick from the best matches for the track playing now, drawn from the
+/// top ten so it's always a sensible fit, never a poor one.
+#[tauri::command]
+pub fn random_suggestion(
+    db: State<DbState>,
+    session: State<CurrentSession>,
+    now_playing_id: i64,
+    mode: String,
+) -> Result<Option<ScoredTrackDto>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let ranked = score_for(&conn, session.0, now_playing_id, &mode)?;
+    let best: Vec<ScoredTrackDto> = ranked
+        .into_iter()
+        .filter(|t| !t.badges.iter().any(|b| b == "UNSCORED"))
+        .take(10)
+        .collect();
+    if best.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(best[random_index(best.len())].clone()))
+}
+
+/// A number in 0..len that changes from call to call, with no extra dependency:
+/// the standard library seeds each hasher randomly.
+fn random_index(len: usize) -> usize {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let value = RandomState::new().build_hasher().finish();
+    (value % len as u64) as usize
+}
+
+fn score_for(
+    conn: &Connection,
+    session_id: i64,
+    now_playing_id: i64,
+    mode: &str,
+) -> Result<Vec<ScoredTrackDto>, String> {
+    let now_playing = load_features(conn, now_playing_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "now-playing track not found".to_string())?;
 
@@ -46,16 +85,16 @@ pub fn recommend_next(
         return Ok(Vec::new());
     }
 
-    let played = plays::played_in_session(&conn, session.0).map_err(|e| e.to_string())?;
-    let transitions = plays::transition_counts_from(&conn, now_playing_id).map_err(|e| e.to_string())?;
+    let played = plays::played_in_session(conn, session_id).map_err(|e| e.to_string())?;
+    let transitions = plays::transition_counts_from(conn, now_playing_id).map_err(|e| e.to_string())?;
 
-    let mut candidates = load_candidate_features(&conn, now_playing_id).map_err(|e| e.to_string())?;
+    let mut candidates = load_candidate_features(conn, now_playing_id).map_err(|e| e.to_string())?;
     for candidate in candidates.iter_mut() {
         candidate.played_in_session = played.contains_key(&candidate.id);
         candidate.transitions_from_now = transitions.get(&candidate.id).copied().unwrap_or(0);
     }
 
-    let results = score_candidates(&now_playing, &candidates, Mode::parse(&mode));
+    let results = score_candidates(&now_playing, &candidates, Mode::parse(mode));
 
     Ok(results
         .into_iter()

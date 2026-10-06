@@ -57,6 +57,21 @@ function App() {
     setAlwaysOnTop(next);
   }
 
+  const [randomPick, setRandomPick] = useState<TrackSummary | null>(null);
+
+  async function rollRandom() {
+    if (nowPlayingId === null) return;
+    try {
+      const pick = await invoke<ScoredTrack | null>("random_suggestion", {
+        nowPlayingId,
+        mode: activeMode ?? "KEEP",
+      });
+      setRandomPick(pick ? (tracks.find((t) => t.id === pick.track_id) ?? null) : null);
+    } catch (e) {
+      console.error("random_suggestion failed", e);
+    }
+  }
+
   async function toggleCompact() {
     const next = !compact;
     await getCurrentWindow().setSize(next ? new LogicalSize(360, 340) : new LogicalSize(410, 760));
@@ -209,7 +224,28 @@ function App() {
         <span className="next-header-note">
           {dbStatus.startsWith("connected") ? (recommendationsLoading ? "scoring…" : "") : dbStatus}
         </span>
+        <button
+          type="button"
+          className="random-btn"
+          disabled={nowPlayingId === null}
+          onClick={() => void rollRandom()}
+          title="A random track from your library that fits the one playing now"
+        >
+          Random
+        </button>
       </div>
+      {randomPick && (
+        <div className="random-pick">
+          <span className="random-pick-text">
+            <b>{randomPick.title ?? "Untitled"}</b> — {randomPick.artist ?? "Unknown artist"}
+            {randomPick.bpm !== null ? ` · ${Math.round(randomPick.bpm)}` : ""}
+            {randomPick.camelot_key ? ` · ${randomPick.camelot_key}` : ""}
+          </span>
+          <button type="button" className="random-play" onClick={() => void playTrack(randomPick.id)}>
+            Play
+          </button>
+        </div>
+      )}
 
       <NextList
         tracks={tracks}

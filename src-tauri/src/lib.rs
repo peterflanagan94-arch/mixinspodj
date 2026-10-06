@@ -109,6 +109,7 @@ pub fn run() {
             watch::list_watched_folders,
             watch::remove_watched_folder,
             recommend::recommend_next,
+            recommend::random_suggestion,
             plays::play_track,
             plays::top_played_tracks,
             plays::list_sets,
