@@ -37,6 +37,15 @@ Short version:
 | M6 | Mode buttons (Keep Dancing / Build Energy / etc.) | **Done** (landed as part of M5 — the buttons existed since the Compact Live shell, M5 is what gave them something real to affect) |
 | M7 | Play tracking, already-played detection | Not started |
 | M8 | Local backups, crash recovery, QA pass, tag v0.1 | Not started |
+| M9 | Accounts and subscriptions (post-MVP) | Not started |
+
+M9 scope, to be decided before building: client accounts and subscription
+tiers. Constraints already agreed: the app must keep working offline (check
+the subscription online, cache it, allow a grace period); all user data is
+scoped to an account from the start; personal data stays local by default
+with sync opt-in (UK GDPR applies); auth and payments provider still to be
+chosen (the radio studio project uses Supabase and Stripe, which could be
+reused).
 
 ¹ Manual select (search → pick) is fully verified live. Drag-in initially
 looked unverifiable, then genuinely didn't work for the user either —
