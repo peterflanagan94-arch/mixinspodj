@@ -93,6 +93,8 @@ pub struct ScoredTrack {
 const TOTAL_DATA_COMPONENTS: usize = 5;
 const HISTORY_BOOST: f32 = 0.15;
 const ALREADY_PLAYED_FACTOR: f32 = 0.5;
+/// Without both BPM and key there is nothing to mix on, so a score can't look like a match.
+const WITHOUT_CORE_DATA_CAP: f32 = 50.0;
 
 /// Scores every candidate against `now_playing` under `mode`, returning them
 /// sorted best-match-first. Candidates with no usable data at all still come
@@ -149,6 +151,11 @@ fn score_one(now: &TrackFeatures, candidate: &TrackFeatures, mode: Mode, weights
     } else {
         0.0
     };
+
+    let has_core = components.iter().any(|c| c.name == "BPM") && components.iter().any(|c| c.name == "Key");
+    if !has_core {
+        score_percent = score_percent.min(WITHOUT_CORE_DATA_CAP);
+    }
 
     if history > 0.0 {
         score_percent = (score_percent * (1.0 + HISTORY_BOOST * history)).clamp(0.0, 100.0);
@@ -308,5 +315,23 @@ mod tests {
 
         let results = score_candidates(&now_playing, &[familiar], Mode::Keep);
         assert!(results[0].score_percent >= 100.0 - f32::EPSILON);
+    }
+
+    #[test]
+    fn metadata_only_matches_cannot_reach_full_score() {
+        let now_playing = TrackFeatures {
+            id: 1,
+            year: Some(1978),
+            genre: Some("Disco".into()),
+            ..Default::default()
+        };
+        let metadata_only = TrackFeatures {
+            id: 2,
+            year: Some(1978),
+            genre: Some("Disco".into()),
+            ..Default::default()
+        };
+        let results = score_candidates(&now_playing, &[metadata_only], Mode::Keep);
+        assert!(results[0].score_percent <= WITHOUT_CORE_DATA_CAP, "got {}", results[0].score_percent);
     }
 }

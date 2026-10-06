@@ -42,6 +42,10 @@ pub fn recommend_next(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "now-playing track not found".to_string())?;
 
+    if now_playing.bpm.is_none() || now_playing.camelot_key.is_none() {
+        return Ok(Vec::new());
+    }
+
     let played = plays::played_in_session(&conn, session.0).map_err(|e| e.to_string())?;
     let transitions = plays::transition_counts_from(&conn, now_playing_id).map_err(|e| e.to_string())?;
 

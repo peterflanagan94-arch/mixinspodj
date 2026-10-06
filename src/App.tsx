@@ -55,6 +55,20 @@ function App() {
     await getCurrentWindow().minimize();
   }
 
+  const [analysingId, setAnalysingId] = useState<number | null>(null);
+
+  async function analyseNow(trackId: number) {
+    setAnalysingId(trackId);
+    try {
+      await invoke("analyze_track", { trackId });
+      await refreshTracksRef.current();
+    } catch (e) {
+      console.error("analyze_track failed", e);
+    } finally {
+      setAnalysingId((current) => (current === trackId ? null : current));
+    }
+  }
+
   async function playTrack(trackId: number) {
     if (trackId === nowPlayingId) return;
     const index = recommendations.findIndex((r) => r.track_id === trackId);
@@ -69,6 +83,7 @@ function App() {
       console.error("play_track failed", e);
     }
     setNowPlayingId(trackId);
+    void analyseNow(trackId);
     // A track dragged in from the Library window might not be in this
     // window's in-memory list yet (e.g. it was just scanned there) —
     // refresh so the card doesn't show empty while nowPlayingId is set.
@@ -179,7 +194,13 @@ function App() {
         </span>
       </div>
 
-      <NextList tracks={tracks} nowPlayingId={nowPlayingId} recommendations={recommendations} />
+      <NextList
+        tracks={tracks}
+        nowPlayingId={nowPlayingId}
+        recommendations={recommendations}
+        needsAnalysis={nowPlaying !== null && (nowPlaying.bpm === null || nowPlaying.camelot_key === null)}
+        analysing={analysingId === nowPlayingId}
+      />
 
       <FilterRow
         active={activeFilters}

@@ -5,6 +5,10 @@ type Props = {
   nowPlayingId: number | null;
   /** Already sorted best-match-first by the backend. */
   recommendations: ScoredTrack[];
+  /** True when the now-playing track has no BPM or key yet. */
+  needsAnalysis: boolean;
+  /** True while the now-playing track is being analysed in the background. */
+  analysing: boolean;
 };
 
 /**
@@ -19,7 +23,16 @@ type Props = {
  * Each row is a real HTML5 drag source (M4) — drag it onto NOW PLAYING
  * to switch to it.
  */
-export function NextList({ tracks, nowPlayingId, recommendations }: Props) {
+export function NextList({ tracks, nowPlayingId, recommendations, needsAnalysis, analysing }: Props) {
+  if (nowPlayingId !== null && needsAnalysis) {
+    return (
+      <div className="next-empty">
+        {analysing
+          ? "Analysing this track…"
+          : "This track isn't analysed yet, so there are no suggestions. Settings → Analyze Library."}
+      </div>
+    );
+  }
   if (nowPlayingId === null) {
     return <div className="next-empty">Select a Now Playing track to see recommendations.</div>;
   }

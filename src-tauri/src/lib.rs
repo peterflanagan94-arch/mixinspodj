@@ -97,6 +97,7 @@ pub fn run() {
             tracks::search_tracks,
             tracks::update_track_metadata,
             analysis::analyze_library,
+            analysis::analyze_track,
             watch::list_watched_folders,
             watch::remove_watched_folder,
             recommend::recommend_next,

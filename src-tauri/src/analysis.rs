@@ -80,3 +80,45 @@ pub fn analyze_library(app: AppHandle, db: State<DbState>) -> Result<AnalyzeSumm
 
     Ok(summary)
 }
+
+/// Analyses one track straight away, so a track that starts playing without
+/// BPM or key gets suggestions without a full library analysis. A track that's
+/// already analysed is left alone.
+#[tauri::command(async)]
+pub fn analyze_track(db: State<DbState>, track_id: i64) -> Result<(), String> {
+    let path: String = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let analysed: bool = conn
+            .query_row(
+                "SELECT analyzed_at IS NOT NULL FROM tracks WHERE id = ?1",
+                rusqlite::params![track_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        if analysed {
+            return Ok(());
+        }
+        conn.query_row(
+            "SELECT file_path FROM tracks WHERE id = ?1",
+            rusqlite::params![track_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?
+    };
+
+    let result = analyze_file(Path::new(&path)).map_err(|e| e.to_string())?;
+    let update = AnalysisUpdate {
+        track_id,
+        bpm: result.bpm,
+        bpm_confidence: result.bpm_confidence,
+        key: result.key,
+        camelot_key: result.camelot_key,
+        energy: result.energy,
+        danceability: result.danceability,
+        loudness_rms: result.loudness_rms,
+        spectral_centroid: result.spectral_centroid,
+        onset_density: result.onset_density,
+    };
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    library::save_analysis(&conn, &update).map_err(|e| e.to_string())
+}
