@@ -113,3 +113,12 @@ export type ImportSummary = {
   indexed: number;
   missing_files: number;
 };
+
+export type TopPlayed = {
+  track_id: number;
+  title: string | null;
+  artist: string | null;
+  bpm: number | null;
+  camelot_key: string | null;
+  plays: number;
+};

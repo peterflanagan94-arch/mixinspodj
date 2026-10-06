@@ -620,3 +620,10 @@ button:disabled {
   gap: 8px;
   margin-top: 6px;
 }
+
+.search-result-meta {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}

@@ -6,6 +6,7 @@ type Props = {
   onMinimize: () => void;
   onOpenSettings: () => void;
   onOpenSearch: () => void;
+  onOpenTopPlayed: () => void;
   onOpenLibrary: () => void;
   eventContext: EventContext;
   onChangeEventContext: (ctx: EventContext) => void;
@@ -17,6 +18,7 @@ export function TopBar({
   onMinimize,
   onOpenSettings,
   onOpenSearch,
+  onOpenTopPlayed,
   onOpenLibrary,
   eventContext,
   onChangeEventContext,
@@ -54,6 +56,9 @@ export function TopBar({
         </button>
         <button className="icon-btn" title="Find a track" onClick={onOpenSearch}>
           ⌕
+        </button>
+        <button className="icon-btn" title="Your most played" onClick={onOpenTopPlayed}>
+          ★
         </button>
         <button
           className={`icon-btn ${alwaysOnTop ? "icon-btn-active" : ""}`}

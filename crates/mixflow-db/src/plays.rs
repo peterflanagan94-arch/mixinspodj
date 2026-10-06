@@ -24,6 +24,19 @@ pub fn start_session(conn: &Connection) -> Result<i64, DbError> {
 /// the recommendations the DJ was looking at, if it came from there — that's
 /// what makes a play "recommended" rather than "manual," and it's the signal
 /// the learning side needs to see whether suggestions get used.
+/// The tracks played most often across every session, most played first, as
+/// (track_id, number of plays). Ties keep the track that was played first.
+pub fn top_played(conn: &Connection, limit: i64) -> Result<Vec<(i64, i64)>, DbError> {
+    let mut stmt = conn.prepare(
+        "SELECT track_id, COUNT(*) AS plays FROM played_tracks \
+         GROUP BY track_id ORDER BY plays DESC, MIN(played_at) ASC LIMIT ?1",
+    )?;
+    let rows = stmt
+        .query_map(params![limit], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 pub fn record_play(
     conn: &Connection,
     session_id: i64,
@@ -181,5 +194,22 @@ mod tests {
         let played = played_in_session(&conn, session).unwrap();
         assert_eq!(played.len(), 1);
         assert!(played.contains_key(&a));
+    }
+
+    #[test]
+    fn top_played_counts_plays_per_track_across_sessions() {
+        let conn = connect_in_memory().unwrap();
+        let first = start_session(&conn).unwrap();
+        let a = add_track(&conn, "a");
+        let b = add_track(&conn, "b");
+        record_play(&conn, first, a, None, "KEEP", None, false).unwrap();
+        record_play(&conn, first, b, None, "KEEP", None, false).unwrap();
+        let second = start_session(&conn).unwrap();
+        record_play(&conn, second, b, None, "KEEP", None, false).unwrap();
+        record_play(&conn, second, b, None, "KEEP", None, false).unwrap();
+
+        let top = top_played(&conn, 10).unwrap();
+        assert_eq!(top, vec![(b, 3), (a, 1)]);
+        assert_eq!(top_played(&conn, 1).unwrap(), vec![(b, 3)]);
     }
 }

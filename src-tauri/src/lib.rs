@@ -107,7 +107,8 @@ pub fn run() {
             watch::list_watched_folders,
             watch::remove_watched_folder,
             recommend::recommend_next,
-            plays::play_track
+            plays::play_track,
+            plays::top_played_tracks
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

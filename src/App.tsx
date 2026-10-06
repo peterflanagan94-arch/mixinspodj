@@ -9,6 +9,7 @@ import { ModeRow } from "./components/ModeRow";
 import { FilterRow, Filter } from "./components/FilterRow";
 import { NextList } from "./components/NextList";
 import { SearchPanel } from "./components/SearchPanel";
+import { TopPlayedPanel } from "./components/TopPlayedPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { DirectionMode, EventContext, ScoredTrack, TraktorStatus, TraktorTrack, TrackSummary } from "./types";
 import "./App.css";
@@ -24,6 +25,7 @@ function App() {
   const [activeFilters, setActiveFilters] = useState<Filter[]>([]);
 
   const [searchOpen, setSearchOpen] = useState(false);
+  const [topPlayedOpen, setTopPlayedOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [recommendations, setRecommendations] = useState<ScoredTrack[]>([]);
@@ -173,6 +175,7 @@ function App() {
         onMinimize={minimize}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenSearch={() => setSearchOpen(true)}
+        onOpenTopPlayed={() => setTopPlayedOpen(true)}
         onOpenLibrary={openLibrary}
         eventContext={eventContext}
         onChangeEventContext={setEventContext}
@@ -210,6 +213,11 @@ function App() {
         }
       />
 
+      <TopPlayedPanel
+        open={topPlayedOpen}
+        onClose={() => setTopPlayedOpen(false)}
+        onSelectTrack={(trackId) => void playTrack(trackId)}
+      />
       <SearchPanel
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
