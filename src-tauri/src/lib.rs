@@ -9,6 +9,9 @@ mod tracks;
 
 pub(crate) struct DbState(pub(crate) Mutex<rusqlite::Connection>);
 
+const BACKUP_INTERVAL_SECS: u64 = 30 * 60;
+const BACKUPS_TO_KEEP: usize = 10;
+
 /// Proves the SQLite connection + migrations are wired end-to-end from the
 /// frontend. Not a long-term API — superseded once real library/gig
 /// commands land in later milestones.
@@ -42,10 +45,43 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir).expect("should be able to create app data dir");
 
             let db_path = data_dir.join("mixinspodj.sqlite3");
-            let conn = mixflow_db::connect(&db_path).expect("database should open and migrate");
+            let backup_dir = data_dir.join("backups");
+            let (conn, outcome) = mixflow_db::backup::open_with_recovery(&db_path, &backup_dir)
+                .expect("database should open, or recover from a backup");
+            match &outcome {
+                mixflow_db::backup::OpenOutcome::Opened => {}
+                mixflow_db::backup::OpenOutcome::RestoredFromBackup { from, damaged_moved_to } => {
+                    eprintln!(
+                        "library database was damaged; restored from {} (damaged copy kept at {})",
+                        from.display(),
+                        damaged_moved_to.display()
+                    );
+                }
+                mixflow_db::backup::OpenOutcome::RecreatedEmpty { damaged_moved_to } => {
+                    eprintln!(
+                        "library database was damaged and no backup existed; starting empty (damaged copy kept at {})",
+                        damaged_moved_to.display()
+                    );
+                }
+            }
+
+            mixflow_db::backup::write_backup(&conn, &backup_dir).expect("should write a startup backup");
+            mixflow_db::backup::prune_backups(&backup_dir, BACKUPS_TO_KEEP).expect("should prune old backups");
+
             let session_id = mixflow_db::plays::start_session(&conn).expect("should start a live session");
             app.manage(DbState(Mutex::new(conn)));
             app.manage(plays::CurrentSession(session_id));
+
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(BACKUP_INTERVAL_SECS));
+                let db = handle.state::<DbState>();
+                let guard = db.0.lock();
+                if let Ok(conn) = guard {
+                    let _ = mixflow_db::backup::write_backup(&conn, &backup_dir);
+                    let _ = mixflow_db::backup::prune_backups(&backup_dir, BACKUPS_TO_KEEP);
+                }
+            });
 
             Ok(())
         })

@@ -36,7 +36,7 @@ Short version:
 | M5 | Recommendation engine wired to UI | **Done** |
 | M6 | Mode buttons (Keep Dancing / Build Energy / etc.) | **Done** (landed as part of M5 — the buttons existed since the Compact Live shell, M5 is what gave them something real to affect) |
 | M7 | Play tracking, already-played detection | **Done** |
-| M8 | Local backups, crash recovery, QA pass, tag v0.1 | Not started |
+| M8 | Local backups, crash recovery, QA pass, tag v0.1 | **Done** |
 | M9 | Accounts and subscriptions (post-MVP) | Not started |
 
 M9 scope, to be decided before building: client accounts and subscription
@@ -469,6 +469,37 @@ with "PLAYED 07:25" at the bottom. Afterwards I removed only the test rows
 (plays, the transition, and the test session); the 11 library tracks were not
 touched.
 
+## M8 — what's actually here
+
+Backups and crash recovery for the library database, plus the v0.1 QA pass.
+
+- **Backups** (`mixflow-db::backup`): `VACUUM INTO` writes a consistent copy
+  of the live database into `<app data>/backups/` without stopping the app.
+  One is written at every launch and every 30 minutes; the newest 10 are kept.
+- **Crash recovery**: on launch the database is checked with `quick_check`.
+  If it fails, the damaged file is kept (renamed `damaged-<time>.sqlite3`,
+  never deleted) and the newest valid backup is restored in its place. If
+  there's no backup, the app starts empty and says so.
+- **Backup candidates**: zero-byte files are never treated as backups. This
+  came from a real mistake during testing (an unquoted shell command created
+  an empty `backup-*.sqlite3` file), which is why the guard exists and has a
+  test.
+- **Session handling** is unchanged from M7: each launch starts a new live
+  session and closes any left in progress.
+
+**Tests**: 63 passing across the workspace (19 in `mixflow-db`, including
+writing and listing backups, pruning, a healthy open, restoring from a
+damaged file, the empty-database fallback, and ignoring empty files).
+
+**Verified live**: launched the built `.app`, confirmed the startup backup
+was written, `quick_check` returned `ok`, and the backup held all 11 library
+tracks. I did not corrupt your real database to test recovery live, because
+it holds your scanned library. Recovery is covered by the file-based tests
+above. The 30-minute timer runs the same code path as the startup backup,
+which was verified live, but I haven't waited out a full 30 minutes.
+
+**Tagged**: v0.1.0 (local annotated tag, not pushed).
+
 ## How to run it
 
 ```bash
@@ -499,3 +530,8 @@ if a future automated check does the same.
 ## Known gaps / honesty notes
 
 - No CI configured yet.
+- No automatic DJ-software detection yet (Traktor Broadcasting plan is
+  agreed but not built): plays are set by hand.
+- Session = one app launch. Plays don't carry across restarts.
+- Recovery and backups have no UI; notices go to the console only.
+- Pushed to no remote; there is no CI.

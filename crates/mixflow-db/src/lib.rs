@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
 use std::path::Path;
 
+pub mod backup;
 pub mod library;
 pub mod plays;
 
@@ -16,6 +17,8 @@ pub enum DbError {
     Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
     Migration(#[from] rusqlite_migration::Error),
+    #[error("io error: {0}")]
+    Io(String),
 }
 
 fn migrations() -> Migrations<'static> {
