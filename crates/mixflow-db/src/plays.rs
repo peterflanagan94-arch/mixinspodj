@@ -24,6 +24,86 @@ pub fn start_session(conn: &Connection) -> Result<i64, DbError> {
 /// the recommendations the DJ was looking at, if it came from there — that's
 /// what makes a play "recommended" rather than "manual," and it's the signal
 /// the learning side needs to see whether suggestions get used.
+/// One app session (every launch is one), as a set: when it started, when
+/// its last play happened, and how many tracks were played.
+#[derive(Debug, Clone)]
+pub struct SessionSummary {
+    pub session_id: i64,
+    pub started_at: String,
+    pub last_play_at: Option<String>,
+    pub plays: i64,
+}
+
+pub fn list_sessions(conn: &Connection) -> Result<Vec<SessionSummary>, DbError> {
+    let mut stmt = conn.prepare(
+        "SELECT g.id, g.date, MAX(p.played_at), COUNT(p.id) FROM gigs g \
+         LEFT JOIN played_tracks p ON p.gig_id = g.id \
+         WHERE g.name = 'Live session' GROUP BY g.id ORDER BY g.id DESC",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(SessionSummary {
+                session_id: row.get(0)?,
+                started_at: row.get(1)?,
+                last_play_at: row.get(2)?,
+                plays: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// A play inside a session, in the order it happened. `est_seconds` is how long
+/// the track played, estimated as the gap until the next track started, capped
+/// at the track's length. It is None for the last track, whose end isn't known.
+#[derive(Debug, Clone)]
+pub struct SetPlay {
+    pub position: i64,
+    pub track_id: i64,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub bpm: Option<f64>,
+    pub camelot_key: Option<String>,
+    pub played_at: String,
+    pub source: String,
+    pub mode: String,
+    pub est_seconds: Option<i64>,
+}
+
+pub fn session_plays(conn: &Connection, session_id: i64) -> Result<Vec<SetPlay>, DbError> {
+    let mut stmt = conn.prepare(
+        "SELECT p.position_in_set, p.track_id, t.title, t.artist, t.bpm, t.camelot_key, \
+                p.played_at, p.source, p.mode, t.duration_ms, \
+                CAST(strftime('%s', LEAD(p.played_at) OVER (ORDER BY p.position_in_set)) \
+                     - strftime('%s', p.played_at) AS INTEGER) AS gap \
+         FROM played_tracks p JOIN tracks t ON t.id = p.track_id \
+         WHERE p.gig_id = ?1 ORDER BY p.position_in_set",
+    )?;
+    let rows = stmt
+        .query_map(params![session_id], |row| {
+            let duration_ms: Option<i64> = row.get(9)?;
+            let gap: Option<i64> = row.get(10)?;
+            let est_seconds = gap.map(|gap| match duration_ms {
+                Some(ms) => gap.min(ms / 1000),
+                None => gap,
+            });
+            Ok(SetPlay {
+                position: row.get(0)?,
+                track_id: row.get(1)?,
+                title: row.get(2)?,
+                artist: row.get(3)?,
+                bpm: row.get(4)?,
+                camelot_key: row.get(5)?,
+                played_at: row.get(6)?,
+                source: row.get(7)?,
+                mode: row.get(8)?,
+                est_seconds,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 /// The tracks played most often across every session, most played first, as
 /// (track_id, number of plays). Ties keep the track that was played first.
 pub fn top_played(conn: &Connection, limit: i64) -> Result<Vec<(i64, i64)>, DbError> {
@@ -211,5 +291,54 @@ mod tests {
         let top = top_played(&conn, 10).unwrap();
         assert_eq!(top, vec![(b, 3), (a, 1)]);
         assert_eq!(top_played(&conn, 1).unwrap(), vec![(b, 3)]);
+    }
+
+    #[test]
+    fn a_track_plays_until_the_next_one_starts_capped_at_its_length() {
+        let conn = connect_in_memory().unwrap();
+        let session = start_session(&conn).unwrap();
+        let a = add_track(&conn, "a");
+        let b = add_track(&conn, "b");
+        conn.execute("UPDATE tracks SET duration_ms = 300000 WHERE id = ?1", params![a]).unwrap();
+        conn.execute("UPDATE tracks SET duration_ms = 100000 WHERE id = ?1", params![b]).unwrap();
+        record_play(&conn, session, a, None, "KEEP", None, false).unwrap();
+        record_play(&conn, session, b, Some(a), "KEEP", None, false).unwrap();
+        conn.execute(
+            "UPDATE played_tracks SET played_at = '2026-10-06 20:00:00' WHERE track_id = ?1",
+            params![a],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE played_tracks SET played_at = '2026-10-06 20:02:00' WHERE track_id = ?1",
+            params![b],
+        )
+        .unwrap();
+
+        let plays = session_plays(&conn, session).unwrap();
+        assert_eq!(plays[0].est_seconds, Some(120), "gap to the next track");
+        assert_eq!(plays[1].est_seconds, None, "last track's end is unknown");
+
+        conn.execute(
+            "UPDATE played_tracks SET played_at = '2026-10-06 20:10:00' WHERE track_id = ?1",
+            params![b],
+        )
+        .unwrap();
+        let plays = session_plays(&conn, session).unwrap();
+        assert_eq!(plays[0].est_seconds, Some(300), "capped at the track's length");
+    }
+
+    #[test]
+    fn sessions_are_listed_newest_first_with_their_play_counts() {
+        let conn = connect_in_memory().unwrap();
+        let first = start_session(&conn).unwrap();
+        let second = start_session(&conn).unwrap();
+        let a = add_track(&conn, "a");
+        record_play(&conn, second, a, None, "KEEP", None, false).unwrap();
+
+        let sessions = list_sessions(&conn).unwrap();
+        assert_eq!(sessions[0].session_id, second);
+        assert_eq!(sessions[0].plays, 1);
+        assert_eq!(sessions[1].session_id, first);
+        assert_eq!(sessions[1].plays, 0);
     }
 }

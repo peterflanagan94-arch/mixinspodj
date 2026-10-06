@@ -73,3 +73,63 @@ fn track_details(conn: &Connection, track_id: i64, plays: i64) -> Result<TopPlay
     )
     .map_err(|e| e.to_string())
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SetSummaryDto {
+    pub session_id: i64,
+    pub started_at: String,
+    pub last_play_at: Option<String>,
+    pub plays: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SetPlayDto {
+    pub position: i64,
+    pub track_id: i64,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub bpm: Option<f64>,
+    pub camelot_key: Option<String>,
+    pub played_at: String,
+    pub source: String,
+    pub mode: String,
+    pub est_seconds: Option<i64>,
+}
+
+/// Every app session, newest first, for the Sets panel.
+#[tauri::command]
+pub fn list_sets(db: State<DbState>) -> Result<Vec<SetSummaryDto>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let sessions = plays::list_sessions(&conn).map_err(|e| e.to_string())?;
+    Ok(sessions
+        .into_iter()
+        .map(|s| SetSummaryDto {
+            session_id: s.session_id,
+            started_at: s.started_at,
+            last_play_at: s.last_play_at,
+            plays: s.plays,
+        })
+        .collect())
+}
+
+/// The tracks played in one session, in order, with estimated playtimes.
+#[tauri::command]
+pub fn set_report(db: State<DbState>, session_id: i64) -> Result<Vec<SetPlayDto>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let plays = plays::session_plays(&conn, session_id).map_err(|e| e.to_string())?;
+    Ok(plays
+        .into_iter()
+        .map(|p| SetPlayDto {
+            position: p.position,
+            track_id: p.track_id,
+            title: p.title,
+            artist: p.artist,
+            bpm: p.bpm,
+            camelot_key: p.camelot_key,
+            played_at: p.played_at,
+            source: p.source,
+            mode: p.mode,
+            est_seconds: p.est_seconds,
+        })
+        .collect())
+}

@@ -122,3 +122,23 @@ export type TopPlayed = {
   camelot_key: string | null;
   plays: number;
 };
+
+export type SetSummary = {
+  session_id: number;
+  started_at: string;
+  last_play_at: string | null;
+  plays: number;
+};
+
+export type SetPlay = {
+  position: number;
+  track_id: number;
+  title: string | null;
+  artist: string | null;
+  bpm: number | null;
+  camelot_key: string | null;
+  played_at: string;
+  source: string;
+  mode: string;
+  est_seconds: number | null;
+};
