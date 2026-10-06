@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { SetPlay, SetSummary } from "../types";
+import { SetPlay, SetSummary, TraktorPlay, TraktorSet } from "../types";
 
 type Props = {
   open: boolean;
@@ -12,6 +12,21 @@ const SOURCE_LABEL: Record<string, string> = {
   manual: "own pick",
   detected: "Traktor",
 };
+
+/** "history_2026y10m06d_08h19m42s.nml" becomes "6 Oct 2026, 08:19". */
+function sessionLabel(fileName: string): string {
+  const m = fileName.match(/history_(\d{4})y(\d{2})m(\d{2})d_(\d{2})h(\d{2})m/);
+  if (!m) return fileName.replace(/\.nml$/, "");
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const day = date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return `${day}, ${m[4]}:${m[5]}`;
+}
+
+function clockTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600) % 24;
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
 
 function formatMinutes(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
@@ -28,17 +43,31 @@ export function SetsPanel({ open, onClose }: Props) {
   const [openSet, setOpenSet] = useState<SetSummary | null>(null);
   const [plays, setPlays] = useState<SetPlay[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [traktorSets, setTraktorSets] = useState<TraktorSet[]>([]);
+  const [openTraktorSet, setOpenTraktorSet] = useState<TraktorSet | null>(null);
+  const [traktorPlays, setTraktorPlays] = useState<TraktorPlay[]>([]);
 
   useEffect(() => {
     if (!open) {
       setOpenSet(null);
+      setOpenTraktorSet(null);
       return;
     }
     setError(null);
     invoke<SetSummary[]>("list_sets")
       .then(setSets)
       .catch((e) => setError(String(e)));
+    invoke<TraktorSet[]>("list_traktor_sets")
+      .then(setTraktorSets)
+      .catch((e) => setError(String(e)));
   }, [open]);
+
+  useEffect(() => {
+    if (!openTraktorSet) return;
+    invoke<TraktorPlay[]>("traktor_set_report", { setId: openTraktorSet.set_id })
+      .then(setTraktorPlays)
+      .catch((e) => setError(String(e)));
+  }, [openTraktorSet]);
 
   useEffect(() => {
     if (!openSet) return;
@@ -48,6 +77,47 @@ export function SetsPanel({ open, onClose }: Props) {
   }, [openSet]);
 
   if (!open) return null;
+
+  if (openTraktorSet) {
+    const totalSeconds = traktorPlays.reduce((sum, p) => sum + p.played_seconds, 0);
+    const matched = traktorPlays.filter((p) => p.track_id !== null).length;
+    return (
+      <div className="panel-overlay" onClick={onClose}>
+        <div className="panel" onClick={(e) => e.stopPropagation()}>
+          <div className="panel-header">
+            <button className="icon-btn" onClick={() => setOpenTraktorSet(null)}>
+              ←
+            </button>
+            <span>TRAKTOR SESSION</span>
+            <button className="icon-btn" onClick={onClose}>
+              ✕
+            </button>
+          </div>
+          <div className="panel-results">
+            {error && <p className="error">{error}</p>}
+            <p className="hint">
+              {traktorPlays.length} tracks · {formatMinutes(totalSeconds)} played ·{" "}
+              {matched} matched to your library
+            </p>
+            {traktorPlays.map((p, i) => (
+              <div key={`${p.start_seconds}-${i}`} className="search-result-row">
+                <div>
+                  <div className="search-result-title">{p.title}</div>
+                  <div className="search-result-artist">
+                    {p.artist ?? (p.track_id === null ? "not in your library" : "Unknown artist")}
+                  </div>
+                </div>
+                <div className="search-result-meta">
+                  {clockTime(p.start_seconds)} · {formatMinutes(p.played_seconds)}
+                </div>
+              </div>
+            ))}
+            <p className="hint">Playing times are exact, from Traktor's own history.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const played = plays.reduce((sum, p) => sum + (p.est_seconds ?? 0), 0);
   const suggested = plays.filter((p) => p.source === "recommended").length;
@@ -75,6 +145,25 @@ export function SetsPanel({ open, onClose }: Props) {
         </div>
         <div className="panel-results">
           {error && <p className="error">{error}</p>}
+
+          {!openSet && (
+            <>
+              {traktorSets.length > 0 && <p className="hint">FROM TRAKTOR · exact times</p>}
+              {traktorSets.map((set) => (
+                <button
+                  key={set.set_id}
+                  className="search-result-row"
+                  onClick={() => setOpenTraktorSet(set)}
+                >
+                  <div>
+                    <div className="search-result-title">{sessionLabel(set.file_name)}</div>
+                    <div className="search-result-artist">{set.plays} tracks</div>
+                  </div>
+                </button>
+              ))}
+              {sets.length > 0 && <p className="hint">FROM THIS APP</p>}
+            </>
+          )}
 
           {!openSet &&
             (sets.length === 0 ? (

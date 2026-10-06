@@ -82,6 +82,7 @@ pub fn start(app: AppHandle) {
             changed |= summary.indexed > 0 || summary.tempo_applied > 0;
         }
         changed |= index_watched_folders(&app) > 0;
+        changed |= crate::traktor_history::import_history(&app).imported > 0;
         if changed {
             let _ = app.emit("library-updated", ());
         }

@@ -8,6 +8,7 @@ use rusqlite_migration::{Migrations, M};
 use std::path::Path;
 
 pub mod backup;
+pub mod history;
 pub mod library;
 pub mod plays;
 
@@ -25,6 +26,7 @@ fn migrations() -> Migrations<'static> {
     Migrations::new(vec![
         M::up(include_str!("migrations/0001_init.sql")),
         M::up(include_str!("migrations/0002_tempo_source.sql")),
+        M::up(include_str!("migrations/0003_traktor_history.sql")),
     ])
 }
 

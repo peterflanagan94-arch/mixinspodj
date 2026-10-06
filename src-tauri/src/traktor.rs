@@ -306,7 +306,7 @@ fn note_name_pitch(name: &str) -> Option<(usize, bool)> {
 }
 
 /// The text of the first `open` tag (from its name up to the closing '>').
-fn tag<'a>(s: &'a str, open: &str) -> Option<&'a str> {
+pub(crate) fn tag<'a>(s: &'a str, open: &str) -> Option<&'a str> {
     let start = s.find(open)?;
     let rest = &s[start..];
     let end = rest.find('>').unwrap_or(rest.len());
@@ -314,7 +314,7 @@ fn tag<'a>(s: &'a str, open: &str) -> Option<&'a str> {
 }
 
 /// An XML attribute's value from a tag's text, with the basic entities decoded.
-fn attr(tag: &str, name: &str) -> Option<String> {
+pub(crate) fn attr(tag: &str, name: &str) -> Option<String> {
     let needle = format!(" {name}=\"");
     let start = tag.find(&needle)? + needle.len();
     let len = tag[start..].find('"')?;

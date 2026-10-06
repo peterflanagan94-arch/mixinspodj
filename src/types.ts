@@ -142,3 +142,25 @@ export type SetPlay = {
   mode: string;
   est_seconds: number | null;
 };
+
+export type TraktorSet = {
+  set_id: number;
+  file_name: string;
+  plays: number;
+};
+
+export type TraktorPlay = {
+  title: string;
+  artist: string | null;
+  track_id: number | null;
+  start_seconds: number;
+  played_seconds: number;
+  deck: number;
+};
+
+export type HistoryImportSummary = {
+  files: number;
+  imported: number;
+  unchanged: number;
+  plays: number;
+};

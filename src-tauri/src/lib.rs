@@ -9,6 +9,7 @@ mod recommend;
 mod settings;
 mod tracks;
 mod traktor;
+mod traktor_history;
 mod watch;
 
 pub(crate) struct DbState(pub(crate) Mutex<rusqlite::Connection>);
@@ -110,6 +111,9 @@ pub fn run() {
             plays::play_track,
             plays::top_played_tracks,
             plays::list_sets,
+            traktor_history::import_traktor_history,
+            traktor_history::list_traktor_sets,
+            traktor_history::traktor_set_report,
             plays::set_report
         ])
         .run(tauri::generate_context!())
