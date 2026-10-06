@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { AnalyzeProgress, AnalyzeSummary, ScanProgress, ScanSummary } from "../types";
+import { AnalyzeProgress, AnalyzeSummary, ScanProgress, ScanSummary, TraktorStatus } from "../types";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onLibraryChanged: () => void;
+  traktorStatus: TraktorStatus | null;
 };
 
-export function SettingsPanel({ open, onClose, onLibraryChanged }: Props) {
+export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }: Props) {
   const [folder, setFolder] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [scanSummary, setScanSummary] = useState<ScanSummary | null>(null);
@@ -184,6 +185,30 @@ export function SettingsPanel({ open, onClose, onLibraryChanged }: Props) {
               </div>
             </div>
           )}
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Traktor Pro</div>
+          {traktorStatus?.state === "port-busy" ? (
+            <p className="error">
+              Port {traktorStatus.port} is in use by another app. Quit it and restart MixInspo DJ.
+            </p>
+          ) : (
+            <p className="hint">
+              In Traktor: Preferences → Broadcasting → Server Settings. Address{" "}
+              <strong>{traktorStatus?.address ?? "127.0.0.1"}</strong>, Port{" "}
+              <strong>{traktorStatus?.port ?? 8765}</strong>, Mount path <strong>/mixinspo</strong>,
+              Password <strong>mixinspo</strong>. Then turn Broadcasting on.
+            </p>
+          )}
+          <p className="hint">
+            Status:{" "}
+            {traktorStatus?.state === "connected" ? (
+              <strong className="traktor-connected">Traktor is connected</strong>
+            ) : traktorStatus?.state === "listening"
+                ? "waiting for Traktor"
+                : "starting…"}
+          </p>
         </div>
 
         <div className="settings-section">

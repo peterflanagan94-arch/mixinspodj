@@ -2,6 +2,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 mod analysis;
+mod broadcast;
 mod library_scan;
 mod plays;
 mod recommend;
@@ -71,6 +72,7 @@ pub fn run() {
             let session_id = mixflow_db::plays::start_session(&conn).expect("should start a live session");
             app.manage(DbState(Mutex::new(conn)));
             app.manage(plays::CurrentSession(session_id));
+            broadcast::start(app.handle().clone());
 
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {

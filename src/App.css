@@ -600,3 +600,15 @@ button:disabled {
   letter-spacing: 0.04em;
   color: var(--text-secondary);
 }
+
+.detected-line {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--yellow);
+  border-bottom: 1px solid var(--border);
+}
+
+.traktor-connected {
+  color: var(--cyan);
+  font-weight: 700;
+}

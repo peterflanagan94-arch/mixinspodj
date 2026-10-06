@@ -2263,6 +2263,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mixflow-broadcast"
+version = "0.1.0"
+
+[[package]]
 name = "mixflow-db"
 version = "0.1.0"
 dependencies = [
@@ -2290,6 +2294,7 @@ dependencies = [
  "blake3",
  "lofty",
  "mixflow-analysis",
+ "mixflow-broadcast",
  "mixflow-db",
  "mixflow-recommender",
  "rfd",

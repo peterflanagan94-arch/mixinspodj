@@ -535,3 +535,29 @@ if a future automated check does the same.
 - Session = one app launch. Plays don't carry across restarts.
 - Recovery and backups have no UI; notices go to the console only.
 - Pushed to no remote; there is no CI.
+
+## Traktor Pro detection — what's actually here
+
+Automatic now-playing from Traktor, via its Broadcasting feature.
+
+- **Protocol (read from a real capture, not guessed):** Traktor connects as an
+  Icecast source (`SOURCE /mixinspo`, Basic auth), streams Ogg Vorbis audio,
+  and writes a Vorbis comment header with `ARTIST=` and `TITLE=` into the
+  stream when a track is loaded. No separate metadata request is made.
+- **`mixflow-broadcast` crate:** Ogg page reassembly, Vorbis comment parsing and
+  track-change detection. 12 tests, including one run on the real captured bytes.
+- **`broadcast.rs`:** listens on 127.0.0.1:8765, answers the Icecast handshake,
+  matches each track against the library, and emits `traktor-track` and
+  `traktor-status` events. Matched tracks become NOW PLAYING; unmatched ones
+  show as a yellow line.
+- **Settings:** shows the address, port and live status
+  (listening / connected / port in use).
+
+**Verified live:** Traktor connected and status showed "connected". A track
+was detected and shown ("Unknown artist — Words", not in library). The matched
+path (auto NOW PLAYING from the library) is covered by unit tests, but not yet
+seen live.
+
+**Known gaps:** detected plays are recorded as `manual`, not `detected`; the
+port is fixed at 8765 (no automatic re-selection); a track with no ARTIST tag
+can't be matched.

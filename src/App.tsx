@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -9,7 +10,7 @@ import { FilterRow, Filter } from "./components/FilterRow";
 import { NextList } from "./components/NextList";
 import { SearchPanel } from "./components/SearchPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { DirectionMode, EventContext, ScoredTrack, TrackSummary } from "./types";
+import { DirectionMode, EventContext, ScoredTrack, TraktorStatus, TraktorTrack, TrackSummary } from "./types";
 import "./App.css";
 
 function App() {
@@ -76,6 +77,30 @@ function App() {
     }
   }
 
+  const [traktorStatus, setTraktorStatus] = useState<TraktorStatus | null>(null);
+  const [detected, setDetected] = useState<TraktorTrack | null>(null);
+  const playRef = useRef(playTrack);
+  playRef.current = playTrack;
+
+  useEffect(() => {
+    const unlistenTrack = listen<TraktorTrack>("traktor-track", (event) => {
+      const track = event.payload;
+      if (track.track_id !== null) {
+        setDetected(null);
+        void playRef.current(track.track_id);
+      } else {
+        setDetected(track);
+      }
+    });
+    const unlistenStatus = listen<TraktorStatus>("traktor-status", (event) => {
+      setTraktorStatus(event.payload);
+    });
+    return () => {
+      unlistenTrack.then((f) => f());
+      unlistenStatus.then((f) => f());
+    };
+  }, []);
+
   useEffect(() => {
     if (nowPlayingId === null) {
       setRecommendations([]);
@@ -132,6 +157,11 @@ function App() {
       />
 
       <NowPlaying track={nowPlaying} onPick={() => setSearchOpen(true)} onDropTrack={playTrack} />
+      {detected && (
+        <div className="detected-line">
+          Traktor: {detected.artist ?? "Unknown artist"} — {detected.title ?? "Untitled"} · not in your library
+        </div>
+      )}
 
       <ModeRow active={activeMode} onSelect={setActiveMode} />
 
@@ -160,6 +190,7 @@ function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onLibraryChanged={refreshTracks}
+        traktorStatus={traktorStatus}
       />
     </main>
   );

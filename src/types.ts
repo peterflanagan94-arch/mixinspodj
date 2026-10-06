@@ -92,3 +92,15 @@ export const EVENT_CONTEXTS = [
   "OTHER",
 ] as const;
 export type EventContext = (typeof EVENT_CONTEXTS)[number];
+
+export type TraktorTrack = {
+  artist: string | null;
+  title: string | null;
+  track_id: number | null;
+};
+
+export type TraktorStatus = {
+  state: "listening" | "connected" | "port-busy";
+  address: string;
+  port: number;
+};

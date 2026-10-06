@@ -239,6 +239,19 @@ pub fn save_analysis(conn: &Connection, update: &AnalysisUpdate) -> Result<(), D
     Ok(())
 }
 
+/// Finds a library track by artist and title, ignoring case and surrounding
+/// whitespace. Used to match what Traktor reports against the user's own files.
+pub fn find_track_by_artist_title(conn: &Connection, artist: &str, title: &str) -> Result<Option<i64>, DbError> {
+    conn.query_row(
+        "SELECT id FROM tracks WHERE lower(trim(artist)) = lower(trim(?1)) \
+         AND lower(trim(title)) = lower(trim(?2)) AND missing_file = 0 LIMIT 1",
+        params![artist, title],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(DbError::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -406,5 +419,28 @@ mod tests {
             )
             .unwrap();
         assert_eq!(a_missing, 0);
+    }
+
+    #[test]
+    fn a_detected_track_is_matched_ignoring_case_and_spacing() {
+        let conn = connect_in_memory().unwrap();
+        let track_id = match upsert_track(
+            &conn,
+            &NewTrack {
+                file_path: "/music/diafonie.flac".into(),
+                file_hash: "hash-d".into(),
+                title: Some("Diafonie".into()),
+                artist: Some("Higher Place".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        {
+            UpsertOutcome::Inserted { track_id } => track_id,
+            other => panic!("expected Inserted, got {other:?}"),
+        };
+
+        assert_eq!(find_track_by_artist_title(&conn, " higher place ", "DIAFONIE").unwrap(), Some(track_id));
+        assert_eq!(find_track_by_artist_title(&conn, "Someone Else", "Diafonie").unwrap(), None);
     }
 }

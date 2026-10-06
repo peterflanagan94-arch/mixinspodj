@@ -7,6 +7,7 @@ members = [
     "crates/mixflow-recommender",
     "crates/mixflow-providers",
     "crates/mixflow-session",
+    "crates/mixflow-broadcast",
 ]
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
