@@ -1,8 +1,10 @@
+use mixflow_db::plays;
 use mixflow_recommender::{score_candidates, Mode, TrackFeatures};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use tauri::State;
 
+use crate::plays::CurrentSession;
 use crate::DbState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -19,16 +21,18 @@ pub struct ScoredTrackDto {
     pub score_percent: f32,
     pub components: Vec<ScoreComponentDto>,
     pub badges: Vec<String>,
+    /// When this track was last played in the current session (local time),
+    /// if it has been. The UI dims the row and shows this.
+    pub played_at: Option<String>,
 }
 
 /// Scores every other (non-missing-file) track in the library against
-/// `now_playing_id` under `mode`, best match first. See
-/// `mixflow-recommender` for what's actually being computed and what
-/// isn't yet (there's no transition-history or event-suitability
-/// component — no real data exists for either yet).
+/// `now_playing_id` under `mode`, best match first, using both the audio
+/// features and the DJ's own play history.
 #[tauri::command]
 pub fn recommend_next(
     db: State<DbState>,
+    session: State<CurrentSession>,
     now_playing_id: i64,
     mode: String,
 ) -> Result<Vec<ScoredTrackDto>, String> {
@@ -38,7 +42,14 @@ pub fn recommend_next(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "now-playing track not found".to_string())?;
 
-    let candidates = load_candidate_features(&conn, now_playing_id).map_err(|e| e.to_string())?;
+    let played = plays::played_in_session(&conn, session.0).map_err(|e| e.to_string())?;
+    let transitions = plays::transition_counts_from(&conn, now_playing_id).map_err(|e| e.to_string())?;
+
+    let mut candidates = load_candidate_features(&conn, now_playing_id).map_err(|e| e.to_string())?;
+    for candidate in candidates.iter_mut() {
+        candidate.played_in_session = played.contains_key(&candidate.id);
+        candidate.transitions_from_now = transitions.get(&candidate.id).copied().unwrap_or(0);
+    }
 
     let results = score_candidates(&now_playing, &candidates, Mode::parse(&mode));
 
@@ -58,6 +69,7 @@ pub fn recommend_next(
                 })
                 .collect(),
             badges: scored.badges.into_iter().map(str::to_string).collect(),
+            played_at: played.get(&scored.track_id).cloned(),
         })
         .collect())
 }
@@ -89,5 +101,6 @@ fn map_features(row: &rusqlite::Row) -> rusqlite::Result<TrackFeatures> {
         energy: row.get::<_, Option<f64>>(3)?.map(|v| v as f32),
         genre: row.get(4)?,
         year: row.get(5)?,
+        ..Default::default()
     })
 }

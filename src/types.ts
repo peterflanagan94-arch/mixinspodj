@@ -69,8 +69,11 @@ export type ScoredTrack = {
   score_percent: number;
   /** Sorted strongest-contribution-first by the backend. */
   components: ScoreComponent[];
-  /** "PARTIAL_DATA" (some components missing) or "UNSCORED" (none at all) */
+  /** "PARTIAL_DATA" (some components missing), "UNSCORED" (none at all),
+   * or "ALREADY_PLAYED" (played earlier this session — penalised, not hidden) */
   badges: string[];
+  /** Local time of the last play this session, "YYYY-MM-DD HH:MM:SS". */
+  played_at: string | null;
 };
 
 export const DIRECTION_MODES = ["KEEP", "BUILD", "COOL", "SWITCH", "RESCUE"] as const;

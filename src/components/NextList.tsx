@@ -39,10 +39,11 @@ export function NextList({ tracks, nowPlayingId, recommendations }: Props) {
         const unscored = scored.badges.includes("UNSCORED");
         const partial = scored.badges.includes("PARTIAL_DATA");
         const topReason = scored.components[0]?.explanation;
+        const playedTime = scored.played_at?.slice(11, 16) ?? null;
 
         return (
           <div
-            className="track-row"
+            className={`track-row ${playedTime ? "track-row-played" : ""}`}
             key={track.id}
             draggable
             onDragStart={(e) => {
@@ -66,7 +67,11 @@ export function NextList({ tracks, nowPlayingId, recommendations }: Props) {
                 <span>{track.bpm !== null ? Math.round(track.bpm) : "—"}</span>
                 <span>{track.camelot_key ?? "—"}</span>
               </div>
-              {topReason && <div className="track-row-reason">{topReason}</div>}
+              {playedTime ? (
+                <div className="track-row-played-tag">PLAYED {playedTime}</div>
+              ) : (
+                topReason && <div className="track-row-reason">{topReason}</div>
+              )}
             </div>
           </div>
         );

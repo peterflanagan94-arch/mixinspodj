@@ -8,6 +8,7 @@ use rusqlite_migration::{Migrations, M};
 use std::path::Path;
 
 pub mod library;
+pub mod plays;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {

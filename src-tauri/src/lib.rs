@@ -3,6 +3,7 @@ use tauri::Manager;
 
 mod analysis;
 mod library_scan;
+mod plays;
 mod recommend;
 mod tracks;
 
@@ -42,7 +43,9 @@ pub fn run() {
 
             let db_path = data_dir.join("mixinspodj.sqlite3");
             let conn = mixflow_db::connect(&db_path).expect("database should open and migrate");
+            let session_id = mixflow_db::plays::start_session(&conn).expect("should start a live session");
             app.manage(DbState(Mutex::new(conn)));
+            app.manage(plays::CurrentSession(session_id));
 
             Ok(())
         })
@@ -54,7 +57,8 @@ pub fn run() {
             tracks::search_tracks,
             tracks::update_track_metadata,
             analysis::analyze_library,
-            recommend::recommend_next
+            recommend::recommend_next,
+            plays::play_track
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

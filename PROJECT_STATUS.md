@@ -35,7 +35,7 @@ Short version:
 | M4 | NOW PLAYING manual select / drag-in | **Done**¹ |
 | M5 | Recommendation engine wired to UI | **Done** |
 | M6 | Mode buttons (Keep Dancing / Build Energy / etc.) | **Done** (landed as part of M5 — the buttons existed since the Compact Live shell, M5 is what gave them something real to affect) |
-| M7 | Play tracking, already-played detection | Not started |
+| M7 | Play tracking, already-played detection | **Done** |
 | M8 | Local backups, crash recovery, QA pass, tag v0.1 | Not started |
 | M9 | Accounts and subscriptions (post-MVP) | Not started |
 
@@ -434,6 +434,40 @@ set one as NOW PLAYING, and confirmed:
   for a rescue," independent of how close its BPM/key were.
 
 `mixflow-recommender`: 32/32 tests passing. Full workspace: 50/50.
+
+## M7 — what's actually here
+
+Play tracking: every time a track becomes NOW PLAYING it's recorded, and
+the move from the previous track is recorded as a transition. This is the
+learning data the recommender will draw on over time.
+
+- **Sessions**: each app launch starts a "Live session" (a `gigs` row marked
+  in progress; any earlier in-progress one is closed). Plays belong to that
+  session. Per-gig and per-client grouping comes with PREP.
+- **`mixflow-db::plays`**: `start_session`, `record_play` (writes
+  `played_tracks` with position and source, plus a `transitions` row when
+  there's a previous track), `played_in_session`, `transition_counts_from`.
+  Four new tests.
+- **Source**: a play is `recommended` if the track was on screen in NEXT
+  when chosen (its rank is stored), otherwise `manual`. Those ranks are what
+  will show whether suggestions get used.
+- **Recommender**: already-played tracks are halved in score and badged
+  `ALREADY_PLAYED`, never removed. The DJ's own transition history boosts a
+  candidate (log-scaled, up to +15%). It's a boost rather than a weighted
+  component so a weak history value can't drag a good match down. Four new
+  tests; 35 recommender tests in total.
+- **UI**: NEXT rows for played tracks are dimmed with "PLAYED HH:MM" and stay
+  draggable. The `played_at` time uses local time.
+- **Not yet**: play history isn't learned from automatic detection (that's
+  the Traktor work), and there is no crowd-state or event-type recording.
+
+**Verified live**: launched the app, set Dancing Queen as NOW PLAYING by
+search (recorded as `manual`, position 1), then set September from the search
+(recorded as `recommended`, position 2), and checked the `transitions` table
+(11→10, `was_recommended` = 1). Dancing Queen then appeared in NEXT dimmed
+with "PLAYED 07:25" at the bottom. Afterwards I removed only the test rows
+(plays, the transition, and the test session); the 11 library tracks were not
+touched.
 
 ## How to run it
 

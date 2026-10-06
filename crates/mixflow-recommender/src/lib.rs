@@ -4,28 +4,29 @@
 //! has no opinion about where its inputs come from.
 //!
 //! Combines BPM compatibility, harmonic (Camelot) compatibility, energy
-//! compatibility, genre compatibility, and era compatibility, each
-//! weighted by a per-[`Mode`] profile ([`weights`]). Two components from
-//! the original design — historical transition frequency and event-type
-//! suitability — are deliberately **not implemented yet**: there's no
-//! transition history (that needs M7, play tracking) and no real event
-//! data (that needs the PREP module) for them to honestly draw on. Adding
-//! fake versions of either would be worse than leaving them out; the
-//! architecture (an extra weighted component feeding the same weighted
-//! average) is ready for them whenever that data exists.
+//! compatibility, genre compatibility, and era compatibility, each weighted
+//! by a per-[`Mode`] profile ([`weights`]). Components whose inputs are
+//! missing are left out and the rest renormalize, rather than being guessed.
 //!
-//! Any component whose inputs are missing (a track that hasn't been
-//! analyzed yet, say) is simply left out of that track's score — the
-//! remaining components are renormalized over whatever weight *is*
-//! present, rather than guessing at a neutral value. A track scored from
-//! only 2 of 5 components is flagged with a `PARTIAL_DATA` badge so the
-//! caller can show that honestly instead of implying full confidence.
+//! Two adjustments sit on top of that weighted average, both driven by the
+//! DJ's own set history:
+//! - **Transition history** boosts a candidate the DJ has actually played
+//!   right after the current track before (see [`history`]). It's a boost,
+//!   not a weighted component, so it can lift a match but never drag a good
+//!   one down.
+//! - **Already played** in the current session halves the score and carries
+//!   an `ALREADY_PLAYED` badge. It's penalised, never removed: the DJ can
+//!   still choose it deliberately.
+//!
+//! Event-type suitability is still not implemented: there's no real event
+//! data yet (the PREP module), and a fake version would be worse than none.
 
 mod bpm;
 mod energy;
 mod era;
 mod genre;
 mod harmonic;
+mod history;
 mod weights;
 
 pub use weights::{weights_for, WeightProfile};
@@ -63,6 +64,11 @@ pub struct TrackFeatures {
     pub energy: Option<f32>,
     pub genre: Option<String>,
     pub year: Option<i32>,
+    /// Times the DJ has played this track directly after the now-playing one.
+    /// Only meaningful on candidates; zero means no history.
+    pub transitions_from_now: u32,
+    /// Whether this track has already been played in the current session.
+    pub played_in_session: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -77,18 +83,20 @@ pub struct ScoreComponent {
 pub struct ScoredTrack {
     pub track_id: i64,
     pub score_percent: f32,
-    /// Sorted by contribution (weight * value) descending, so the first
-    /// entry is always the strongest reason this track was recommended.
+    /// Sorted by contribution (weight * value) descending, with the DJ's own
+    /// transition history placed first when present — it's the most specific
+    /// reason a track was suggested.
     pub components: Vec<ScoreComponent>,
     pub badges: Vec<&'static str>,
 }
 
-const TOTAL_POSSIBLE_COMPONENTS: usize = 5;
+const TOTAL_DATA_COMPONENTS: usize = 5;
+const HISTORY_BOOST: f32 = 0.15;
+const ALREADY_PLAYED_FACTOR: f32 = 0.5;
 
-/// Scores every candidate against `now_playing` under `mode`, returning
-/// them sorted best-match-first. Candidates with no usable data at all
-/// (every component unscored) still come back — tagged `UNSCORED` — so a
-/// caller can choose to show or hide them, rather than silently vanishing.
+/// Scores every candidate against `now_playing` under `mode`, returning them
+/// sorted best-match-first. Candidates with no usable data at all still come
+/// back, tagged `UNSCORED`, so a caller can choose to show or hide them.
 pub fn score_candidates(now_playing: &TrackFeatures, candidates: &[TrackFeatures], mode: Mode) -> Vec<ScoredTrack> {
     let weights = weights_for(mode);
     let mut scored: Vec<ScoredTrack> = candidates
@@ -132,19 +140,39 @@ fn score_one(now: &TrackFeatures, candidate: &TrackFeatures, mode: Mode, weights
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let badges = if components.is_empty() {
-        vec!["UNSCORED"]
-    } else if components.len() < TOTAL_POSSIBLE_COMPONENTS {
-        vec!["PARTIAL_DATA"]
-    } else {
-        vec![]
-    };
+    let mut badges = Vec::new();
+    let data_count = components.len();
 
-    let score_percent = if weight_total > 0.0 {
+    let history = history::strength(candidate.transitions_from_now);
+    let mut score_percent = if weight_total > 0.0 {
         (weighted_sum / weight_total * 100.0).clamp(0.0, 100.0)
     } else {
         0.0
     };
+
+    if history > 0.0 {
+        score_percent = (score_percent * (1.0 + HISTORY_BOOST * history)).clamp(0.0, 100.0);
+        components.insert(
+            0,
+            ScoreComponent {
+                name: "History",
+                weight: 0.0,
+                value: history,
+                explanation: "You've played this transition before",
+            },
+        );
+    }
+
+    if candidate.played_in_session {
+        score_percent *= ALREADY_PLAYED_FACTOR;
+        badges.push("ALREADY_PLAYED");
+    }
+
+    if data_count == 0 {
+        badges.push("UNSCORED");
+    } else if data_count < TOTAL_DATA_COMPONENTS {
+        badges.push("PARTIAL_DATA");
+    }
 
     ScoredTrack {
         track_id: candidate.id,
@@ -166,6 +194,7 @@ mod tests {
             energy: Some(energy),
             genre: Some(genre.to_string()),
             year: Some(year),
+            ..Default::default()
         }
     }
 
@@ -228,8 +257,6 @@ mod tests {
 
         let results = score_candidates(&now_playing, &[candidate], Mode::Keep);
         let top_component = &results[0].components[0];
-        // BPM and Key are both perfect matches and carry the top two
-        // weights under Keep — either is a legitimate "top reason".
         assert!(top_component.name == "BPM" || top_component.name == "Key");
         assert_eq!(top_component.value, 1.0);
     }
@@ -239,5 +266,47 @@ mod tests {
         assert_eq!(Mode::parse("BUILD"), Mode::Build);
         assert_eq!(Mode::parse("rescue"), Mode::Rescue);
         assert_eq!(Mode::parse("nonsense"), Mode::Keep);
+    }
+
+    #[test]
+    fn a_track_already_played_this_session_is_penalised_not_removed() {
+        let now_playing = track(1, 126.0, "4A", 6.0, "Disco", 1978);
+        let fresh = track(2, 126.0, "4A", 6.0, "Disco", 1978);
+        let mut played = track(3, 126.0, "4A", 6.0, "Disco", 1978);
+        played.played_in_session = true;
+
+        let results = score_candidates(&now_playing, &[fresh, played], Mode::Keep);
+
+        let fresh_result = results.iter().find(|r| r.track_id == 2).unwrap();
+        let played_result = results.iter().find(|r| r.track_id == 3).unwrap();
+        assert!(played_result.score_percent < fresh_result.score_percent);
+        assert!(played_result.badges.contains(&"ALREADY_PLAYED"));
+        assert!(!fresh_result.badges.contains(&"ALREADY_PLAYED"));
+    }
+
+    #[test]
+    fn the_dj_s_own_transition_history_boosts_a_candidate() {
+        let now_playing = track(1, 126.0, "4A", 6.0, "Disco", 1978);
+        let plain = track(2, 132.0, "4A", 6.0, "Disco", 1978);
+        let mut familiar = track(3, 132.0, "4A", 6.0, "Disco", 1978);
+        familiar.transitions_from_now = 4;
+
+        let results = score_candidates(&now_playing, &[plain, familiar], Mode::Keep);
+
+        let plain_result = results.iter().find(|r| r.track_id == 2).unwrap();
+        let familiar_result = results.iter().find(|r| r.track_id == 3).unwrap();
+        assert!(familiar_result.score_percent > plain_result.score_percent);
+        assert_eq!(familiar_result.components[0].name, "History");
+        assert!(!familiar_result.badges.contains(&"PARTIAL_DATA"));
+    }
+
+    #[test]
+    fn transition_history_never_drags_a_good_match_down() {
+        let now_playing = track(1, 126.0, "4A", 6.0, "Disco", 1978);
+        let mut familiar = track(2, 126.0, "4A", 6.0, "Disco", 1978);
+        familiar.transitions_from_now = 1;
+
+        let results = score_candidates(&now_playing, &[familiar], Mode::Keep);
+        assert!(results[0].score_percent >= 100.0 - f32::EPSILON);
     }
 }

@@ -54,7 +54,19 @@ function App() {
     await getCurrentWindow().minimize();
   }
 
-  async function handleDropTrack(trackId: number) {
+  async function playTrack(trackId: number) {
+    if (trackId === nowPlayingId) return;
+    const index = recommendations.findIndex((r) => r.track_id === trackId);
+    try {
+      await invoke("play_track", {
+        trackId,
+        previousTrackId: nowPlayingId,
+        mode: activeMode ?? "KEEP",
+        rank: index >= 0 ? index + 1 : null,
+      });
+    } catch (e) {
+      console.error("play_track failed", e);
+    }
     setNowPlayingId(trackId);
     // A track dragged in from the Library window might not be in this
     // window's in-memory list yet (e.g. it was just scanned there) —
@@ -119,7 +131,7 @@ function App() {
         onChangeEventContext={setEventContext}
       />
 
-      <NowPlaying track={nowPlaying} onPick={() => setSearchOpen(true)} onDropTrack={handleDropTrack} />
+      <NowPlaying track={nowPlaying} onPick={() => setSearchOpen(true)} onDropTrack={playTrack} />
 
       <ModeRow active={activeMode} onSelect={setActiveMode} />
 
@@ -142,7 +154,7 @@ function App() {
       <SearchPanel
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
-        onSelectTrack={(track) => setNowPlayingId(track.id)}
+        onSelectTrack={(track) => void playTrack(track.id)}
       />
       <SettingsPanel
         open={settingsOpen}
