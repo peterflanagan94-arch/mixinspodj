@@ -46,6 +46,17 @@ export function SetsPanel({ open, onClose }: Props) {
   const [traktorSets, setTraktorSets] = useState<TraktorSet[]>([]);
   const [openTraktorSet, setOpenTraktorSet] = useState<TraktorSet | null>(null);
   const [traktorPlays, setTraktorPlays] = useState<TraktorPlay[]>([]);
+  const [exportNote, setExportNote] = useState<string | null>(null);
+
+  async function exportPdf(kind: "app" | "traktor", id: number) {
+    setExportNote(null);
+    try {
+      const saved = await invoke<string | null>("export_set_pdf", { kind, id });
+      if (saved) setExportNote(`Saved to ${saved}`);
+    } catch (e) {
+      setExportNote(String(e));
+    }
+  }
 
   useEffect(() => {
     if (!open) {
@@ -95,6 +106,14 @@ export function SetsPanel({ open, onClose }: Props) {
           </div>
           <div className="panel-results">
             {error && <p className="error">{error}</p>}
+            <button
+              type="button"
+              className="export-btn"
+              onClick={() => void exportPdf("traktor", openTraktorSet.set_id)}
+            >
+              Export PDF
+            </button>
+            {exportNote && <p className="hint">{exportNote}</p>}
             <p className="hint">
               {traktorPlays.length} tracks · {formatMinutes(totalSeconds)} played ·{" "}
               {matched} matched to your library
@@ -181,6 +200,14 @@ export function SetsPanel({ open, onClose }: Props) {
 
           {openSet && (
             <>
+              <button
+                type="button"
+                className="export-btn"
+                onClick={() => void exportPdf("app", openSet.session_id)}
+              >
+                Export PDF
+              </button>
+              {exportNote && <p className="hint">{exportNote}</p>}
               <p className="hint">
                 {plays.length} tracks · about {formatMinutes(played)} played ·{" "}
                 {plays.length > 0 ? Math.round((suggested / plays.length) * 100) : 0}% from suggestions

@@ -179,7 +179,13 @@ pub fn list_traktor_sets(db: tauri::State<DbState>) -> Result<Vec<TraktorSetDto>
 #[tauri::command]
 pub fn traktor_set_report(db: tauri::State<DbState>, set_id: i64) -> Result<Vec<TraktorPlayDto>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
-    let plays = history::set_plays(&conn, set_id).map_err(|e| e.to_string())?;
+    report_rows(&conn, set_id)
+}
+
+/// The plays in one imported Traktor session, in order, with titles from the
+/// library where a track matched. Shared by the Sets screen and the PDF export.
+pub fn report_rows(conn: &rusqlite::Connection, set_id: i64) -> Result<Vec<TraktorPlayDto>, String> {
+    let plays = history::set_plays(conn, set_id).map_err(|e| e.to_string())?;
     plays
         .into_iter()
         .map(|p| {

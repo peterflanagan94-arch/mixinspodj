@@ -2,6 +2,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 mod analysis;
+mod export;
 mod broadcast;
 mod library_scan;
 mod plays;
@@ -111,6 +112,7 @@ pub fn run() {
             plays::play_track,
             plays::top_played_tracks,
             plays::list_sets,
+            export::export_set_pdf,
             traktor_history::import_traktor_history,
             traktor_history::list_traktor_sets,
             traktor_history::traktor_set_report,

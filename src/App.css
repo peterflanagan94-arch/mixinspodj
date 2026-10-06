@@ -669,3 +669,20 @@ button:disabled {
   color: var(--text-tertiary);
   white-space: nowrap;
 }
+
+.export-btn {
+  margin: 4px 0 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--cyan);
+  border-radius: 999px;
+  background: var(--cyan-wash);
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.export-btn:hover {
+  background: var(--cyan);
+  color: #06191c;
+}
