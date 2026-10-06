@@ -31,6 +31,7 @@ pub fn record_play(
     previous_track_id: Option<i64>,
     mode: &str,
     rank: Option<i64>,
+    detected: bool,
 ) -> Result<(), DbError> {
     let existing: i64 = conn.query_row(
         "SELECT COUNT(*) FROM played_tracks WHERE gig_id = ?1",
@@ -38,7 +39,15 @@ pub fn record_play(
         |row| row.get(0),
     )?;
     let position = existing + 1;
-    let source = if rank.is_some() { "recommended" } else { "manual" };
+    // A track Traktor reported playing was never picked here, so it's
+    // "detected" even if it also sat in the suggestions.
+    let source = if detected {
+        "detected"
+    } else if rank.is_some() {
+        "recommended"
+    } else {
+        "manual"
+    };
     let recommended = rank.is_some();
 
     conn.execute(
@@ -119,8 +128,8 @@ mod tests {
         let a = add_track(&conn, "a");
         let b = add_track(&conn, "b");
 
-        record_play(&conn, session, a, None, "KEEP", None).unwrap();
-        record_play(&conn, session, b, Some(a), "BUILD", Some(2)).unwrap();
+        record_play(&conn, session, a, None, "KEEP", None, false).unwrap();
+        record_play(&conn, session, b, Some(a), "BUILD", Some(2), false).unwrap();
 
         let (position, source): (i64, String) = conn
             .query_row(
@@ -134,14 +143,28 @@ mod tests {
     }
 
     #[test]
+    fn a_track_traktor_reports_is_recorded_as_detected() {
+        let conn = connect_in_memory().unwrap();
+        let session = start_session(&conn).unwrap();
+        let a = add_track(&conn, "a");
+
+        record_play(&conn, session, a, None, "KEEP", Some(1), true).unwrap();
+
+        let source: String = conn
+            .query_row("SELECT source FROM played_tracks WHERE track_id = ?1", params![a], |r| r.get(0))
+            .unwrap();
+        assert_eq!(source, "detected");
+    }
+
+    #[test]
     fn a_transition_is_recorded_between_consecutive_plays() {
         let conn = connect_in_memory().unwrap();
         let session = start_session(&conn).unwrap();
         let a = add_track(&conn, "a");
         let b = add_track(&conn, "b");
 
-        record_play(&conn, session, a, None, "KEEP", None).unwrap();
-        record_play(&conn, session, b, Some(a), "KEEP", Some(1)).unwrap();
+        record_play(&conn, session, a, None, "KEEP", None, false).unwrap();
+        record_play(&conn, session, b, Some(a), "KEEP", Some(1), false).unwrap();
 
         let counts = transition_counts_from(&conn, a).unwrap();
         assert_eq!(counts.get(&b), Some(&1));
@@ -152,8 +175,8 @@ mod tests {
         let conn = connect_in_memory().unwrap();
         let session = start_session(&conn).unwrap();
         let a = add_track(&conn, "a");
-        record_play(&conn, session, a, None, "KEEP", None).unwrap();
-        record_play(&conn, session, a, None, "KEEP", None).unwrap();
+        record_play(&conn, session, a, None, "KEEP", None, false).unwrap();
+        record_play(&conn, session, a, None, "KEEP", None, false).unwrap();
 
         let played = played_in_session(&conn, session).unwrap();
         assert_eq!(played.len(), 1);

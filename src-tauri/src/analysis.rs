@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -11,6 +12,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::library_scan::is_cloud_only;
 use crate::{broadcast, DbState};
 
+/// Analysis workers running at once. Each analyses one track at a time.
+const BACKGROUND_WORKERS: usize = 3;
 /// Pause between background tracks, so analysis never saturates the machine.
 const BACKGROUND_GAP: Duration = Duration::from_secs(2);
 /// How often to look again while Traktor is broadcasting (a set may be live).
@@ -134,53 +137,74 @@ fn update_from(track_id: i64, result: AnalysisResult) -> AnalysisUpdate {
     }
 }
 
-/// Analyses unanalysed tracks one at a time in the background, so the library
-/// fills in without anyone pressing Analyze. It pauses while Traktor is
-/// broadcasting, so it never competes with a live set. A track that fails is
-/// skipped for the rest of this run rather than retried endlessly.
+/// Analyses unanalysed tracks in the background, so the library fills in without
+/// anyone pressing Analyze. Several workers run side by side, each claiming a
+/// track before it starts, so none analyse the same one. It pauses while Traktor
+/// is broadcasting, so it never competes with a live set. A track that fails is
+/// skipped for the rest of the run rather than retried endlessly.
 pub fn start_background(app: AppHandle) {
-    std::thread::spawn(move || {
-        let mut failed: HashSet<i64> = HashSet::new();
-        loop {
-            if broadcast::is_live() {
-                sleep(LIVE_RECHECK);
-                continue;
-            }
+    let claimed: Arc<Mutex<HashSet<i64>>> = Arc::default();
+    for _ in 0..BACKGROUND_WORKERS {
+        let app = app.clone();
+        let claimed = claimed.clone();
+        std::thread::spawn(move || background_worker(app, claimed));
+    }
+}
 
-            let next = {
-                let db = app.state::<DbState>();
-                let Ok(conn) = db.0.lock() else {
-                    sleep(IDLE_RECHECK);
-                    continue;
-                };
-                library::next_track_needing_analysis(&conn, &failed)
-            };
-            let Ok(Some(track)) = next else {
+fn background_worker(app: AppHandle, claimed: Arc<Mutex<HashSet<i64>>>) {
+    loop {
+        if broadcast::is_live() {
+            sleep(LIVE_RECHECK);
+            continue;
+        }
+
+        // Claim the next track while holding the database, so two workers can't
+        // pick the same one between the query and the claim.
+        let next = {
+            let db = app.state::<DbState>();
+            let Ok(conn) = db.0.lock() else {
                 sleep(IDLE_RECHECK);
                 continue;
             };
-
-            if is_cloud_only(Path::new(&track.file_path)) {
-                failed.insert(track.id);
+            let Ok(mut claimed_ids) = claimed.lock() else {
+                sleep(IDLE_RECHECK);
                 continue;
+            };
+            let next = library::next_track_needing_analysis(&conn, &claimed_ids);
+            if let Ok(Some(track)) = &next {
+                claimed_ids.insert(track.id);
             }
+            next
+        };
+        let Ok(Some(track)) = next else {
+            sleep(IDLE_RECHECK);
+            continue;
+        };
 
-            match analyze_file(Path::new(&track.file_path)) {
-                Ok(result) => {
-                    let db = app.state::<DbState>();
-                    let saved = match db.0.lock() {
-                        Ok(conn) => library::save_analysis(&conn, &update_from(track.id, result)).is_ok(),
-                        Err(_) => false,
-                    };
-                    if !saved {
-                        failed.insert(track.id);
-                    }
-                }
-                Err(_) => {
-                    failed.insert(track.id);
-                }
-            }
+        // A cloud-only file stays claimed, so it isn't tried again this run.
+        if is_cloud_only(Path::new(&track.file_path)) {
             sleep(BACKGROUND_GAP);
+            continue;
         }
-    });
+
+        let analysed = match analyze_file(Path::new(&track.file_path)) {
+            Ok(result) => {
+                let db = app.state::<DbState>();
+                let saved = match db.0.lock() {
+                    Ok(conn) => library::save_analysis(&conn, &update_from(track.id, result)).is_ok(),
+                    Err(_) => false,
+                };
+                saved
+            }
+            Err(_) => false,
+        };
+        // Once saved, the track leaves the pending list on its own, so it can be
+        // released from the claimed set. A failed track stays claimed.
+        if analysed {
+            if let Ok(mut claimed_ids) = claimed.lock() {
+                claimed_ids.remove(&track.id);
+            }
+        }
+        sleep(BACKGROUND_GAP);
+    }
 }

@@ -69,7 +69,7 @@ function App() {
     }
   }
 
-  async function playTrack(trackId: number) {
+  async function playTrack(trackId: number, detected = false) {
     if (trackId === nowPlayingId) return;
     const index = recommendations.findIndex((r) => r.track_id === trackId);
     try {
@@ -78,6 +78,7 @@ function App() {
         previousTrackId: nowPlayingId,
         mode: activeMode ?? "KEEP",
         rank: index >= 0 ? index + 1 : null,
+        detected,
       });
     } catch (e) {
       console.error("play_track failed", e);
@@ -104,7 +105,7 @@ function App() {
       const track = event.payload;
       if (track.track_id !== null) {
         setDetected(null);
-        void playRef.current(track.track_id);
+        void playRef.current(track.track_id, true);
       } else {
         setDetected(track);
       }
