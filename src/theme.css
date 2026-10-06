@@ -14,12 +14,12 @@
   --border: #25282d;
 
   --text-primary: #f2f3f5;
-  --text-secondary: #9aa0ab;
-  --text-tertiary: #5e636c;
+  --text-secondary: #c3c8d1;
+  --text-tertiary: #8d939d;
   --danger: #e5676a;
 
   font-family: -apple-system, "SF Pro Text", Inter, Helvetica, Arial, sans-serif;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
   color: var(--text-primary);
   background-color: var(--bg-base);

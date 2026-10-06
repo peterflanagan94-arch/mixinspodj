@@ -172,20 +172,21 @@ button {
 /* ===== Mode row ===== */
 .mode-row {
   display: flex;
-  gap: 4px;
-  padding: 7px 10px;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .mode-btn {
-  flex: 1;
+  flex: 1 1 auto;
   border: 1px solid var(--border);
   background: var(--bg-raised);
   color: var(--text-secondary);
-  border-radius: 4px;
-  padding: 5px 2px;
-  font-size: 9.5px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
   cursor: pointer;
@@ -198,14 +199,25 @@ button {
 
 .mode-btn-active {
   border-color: var(--cyan);
-  background: var(--cyan-wash);
-  color: var(--cyan);
+  background: var(--cyan);
+  color: #06191c;
 }
 
 .mode-btn-rescue {
   border-color: var(--yellow);
-  background: var(--yellow-wash);
-  color: var(--yellow);
+  background: var(--yellow);
+  color: #1d1600;
+}
+
+/* ===== Compact view: now playing and the top four suggestions only ===== */
+.app-compact .mode-row,
+.app-compact .next-header,
+.app-compact .detected-line {
+  display: none;
+}
+
+.app-compact .next-list .track-row:nth-child(n + 5) {
+  display: none;
 }
 
 /* ===== Next list ===== */

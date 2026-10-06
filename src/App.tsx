@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { LogicalSize } from "@tauri-apps/api/dpi";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TopBar } from "./components/TopBar";
 import { NowPlaying } from "./components/NowPlaying";
@@ -28,6 +29,7 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [topPlayedOpen, setTopPlayedOpen] = useState(false);
   const [setsOpen, setSetsOpen] = useState(false);
+  const [compact, setCompact] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [recommendations, setRecommendations] = useState<ScoredTrack[]>([]);
@@ -53,6 +55,12 @@ function App() {
     const next = !alwaysOnTop;
     await getCurrentWindow().setAlwaysOnTop(next);
     setAlwaysOnTop(next);
+  }
+
+  async function toggleCompact() {
+    const next = !compact;
+    await getCurrentWindow().setSize(next ? new LogicalSize(360, 340) : new LogicalSize(410, 760));
+    setCompact(next);
   }
 
   async function minimize() {
@@ -170,7 +178,7 @@ function App() {
   const nowPlaying = tracks.find((t) => t.id === nowPlayingId) ?? null;
 
   return (
-    <main className="app">
+    <main className={`app ${compact ? "app-compact" : ""}`}>
       <TopBar
         alwaysOnTop={alwaysOnTop}
         onToggleAlwaysOnTop={toggleAlwaysOnTop}
@@ -179,6 +187,8 @@ function App() {
         onOpenSearch={() => setSearchOpen(true)}
         onOpenTopPlayed={() => setTopPlayedOpen(true)}
         onOpenSets={() => setSetsOpen(true)}
+        compact={compact}
+        onToggleCompact={toggleCompact}
         onOpenLibrary={openLibrary}
         eventContext={eventContext}
         onChangeEventContext={setEventContext}

@@ -8,6 +8,8 @@ type Props = {
   onOpenSearch: () => void;
   onOpenTopPlayed: () => void;
   onOpenSets: () => void;
+  compact: boolean;
+  onToggleCompact: () => void;
   onOpenLibrary: () => void;
   eventContext: EventContext;
   onChangeEventContext: (ctx: EventContext) => void;
@@ -21,6 +23,8 @@ export function TopBar({
   onOpenSearch,
   onOpenTopPlayed,
   onOpenSets,
+  compact,
+  onToggleCompact,
   onOpenLibrary,
   eventContext,
   onChangeEventContext,
@@ -58,6 +62,13 @@ export function TopBar({
         </button>
         <button className="icon-btn" title="Find a track" onClick={onOpenSearch}>
           ⌕
+        </button>
+        <button
+          className={`icon-btn ${compact ? "icon-btn-active" : ""}`}
+          title={compact ? "Full view" : "Compact view"}
+          onClick={onToggleCompact}
+        >
+          ▭
         </button>
         <button className="icon-btn" title="Your sets" onClick={onOpenSets}>
           ▤
