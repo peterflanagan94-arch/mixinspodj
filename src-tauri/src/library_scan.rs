@@ -38,7 +38,7 @@ pub fn pick_music_folder() -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scan_library_folder(
     app: AppHandle,
     db: State<DbState>,

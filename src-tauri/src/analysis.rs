@@ -22,12 +22,10 @@ pub struct AnalyzeSummary {
 }
 
 /// Analyzes every track that hasn't been analyzed yet (BPM, key, energy,
-/// danceability). Runs as a synchronous command — Tauri schedules those off
-/// the main thread, so this never blocks the UI — and processes tracks one
-/// at a time rather than in parallel, which keeps CPU use bounded (the
-/// product principle here is "never peg the CPU during a live gig," not
-/// "finish as fast as possible").
-#[tauri::command]
+/// danceability). `async` so it runs on a background thread: a plain Tauri
+/// command runs on the main thread and would freeze the window for the whole
+/// run. Tracks are processed one at a time, which keeps CPU use bounded.
+#[tauri::command(async)]
 pub fn analyze_library(app: AppHandle, db: State<DbState>) -> Result<AnalyzeSummary, String> {
     let pending = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
