@@ -17,6 +17,26 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
+  const [watchedFolders, setWatchedFolders] = useState<string[]>([]);
+
+  async function loadWatchedFolders() {
+    try {
+      setWatchedFolders(await invoke<string[]>("list_watched_folders"));
+    } catch (e) {
+      setScanError(String(e));
+    }
+  }
+
+  async function removeWatchedFolder(path: string) {
+    await invoke("remove_watched_folder", { path });
+    await loadWatchedFolders();
+    onLibraryChanged();
+  }
+
+  useEffect(() => {
+    if (open) void loadWatchedFolders();
+  }, [open]);
+
   const [analyzeProgress, setAnalyzeProgress] = useState<AnalyzeProgress | null>(null);
   const [analyzeSummary, setAnalyzeSummary] = useState<AnalyzeSummary | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -90,6 +110,18 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
           </button>
 
           {folder && <p className="folder-path">{folder}</p>}
+
+          {watchedFolders.length > 0 && (
+            <div className="watched-folders">
+              <p className="hint">New files in these folders are added automatically:</p>
+              {watchedFolders.map((path) => (
+                <div className="watched-folder-row" key={path}>
+                  <span className="folder-path">{path}</span>
+                  <button onClick={() => removeWatchedFolder(path)}>Stop watching</button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {scanning && scanProgress && (
             <div className="progress">

@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use mixflow_broadcast::{body_start, TrackDetector, TrackTags};
@@ -7,7 +8,12 @@ use mixflow_db::library;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::DbState;
+use crate::{watch, DbState};
+
+const RETRY_INTERVAL: Duration = Duration::from_secs(5);
+const RETRY_ATTEMPTS: u32 = 12;
+/// Bumped on every new track report, so an older search stops once a newer track arrives.
+static SEARCH_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// The address and port to enter in Traktor's Broadcasting settings.
 pub const LISTEN_ADDRESS: &str = "127.0.0.1";
@@ -19,6 +25,8 @@ pub struct TraktorTrack {
     pub title: Option<String>,
     /// The matching track in the library, if there is one.
     pub track_id: Option<i64>,
+    /// True while the app is still looking for the file in your folders.
+    pub searching: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -85,24 +93,53 @@ fn handle(mut stream: TcpStream, app: AppHandle) {
 }
 
 fn report(app: &AppHandle, tags: TrackTags) {
-    let track_id = match (tags.artist.as_deref(), tags.title.as_deref()) {
-        (Some(artist), Some(title)) => {
-            let db = app.state::<DbState>();
-            let found = match db.0.lock() {
-                Ok(conn) => library::find_track_by_artist_title(&conn, artist, title).ok().flatten(),
-                Err(_) => None,
-            };
-            found
+    let generation = SEARCH_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    match lookup(app, &tags) {
+        Some(track_id) => emit_track(app, tags, Some(track_id), false),
+        None => {
+            emit_track(app, tags.clone(), None, true);
+            let app = app.clone();
+            std::thread::spawn(move || search(app, tags, generation));
         }
-        _ => None,
-    };
+    }
+}
 
+/// Keeps looking for a track that isn't in the library yet, since a file that was
+/// just downloaded may still be indexing. Stops if a newer track arrives.
+fn search(app: AppHandle, tags: TrackTags, generation: u64) {
+    for _ in 0..RETRY_ATTEMPTS {
+        std::thread::sleep(RETRY_INTERVAL);
+        if SEARCH_GENERATION.load(Ordering::SeqCst) != generation {
+            return;
+        }
+        watch::index_watched_folders(&app);
+        if let Some(track_id) = lookup(&app, &tags) {
+            if SEARCH_GENERATION.load(Ordering::SeqCst) == generation {
+                emit_track(&app, tags, Some(track_id), false);
+            }
+            return;
+        }
+    }
+    if SEARCH_GENERATION.load(Ordering::SeqCst) == generation {
+        emit_track(&app, tags, None, false);
+    }
+}
+
+fn lookup(app: &AppHandle, tags: &TrackTags) -> Option<i64> {
+    let (artist, title) = (tags.artist.as_deref()?, tags.title.as_deref()?);
+    let db = app.state::<DbState>();
+    let conn = db.0.lock().ok()?;
+    library::find_track_by_artist_title(&conn, artist, title).ok().flatten()
+}
+
+fn emit_track(app: &AppHandle, tags: TrackTags, track_id: Option<i64>, searching: bool) {
     let _ = app.emit(
         "traktor-track",
         TraktorTrack {
             artist: tags.artist,
             title: tags.title,
             track_id,
+            searching,
         },
     );
 }

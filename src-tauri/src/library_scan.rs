@@ -99,14 +99,14 @@ pub fn scan_library_folder(
     Ok(summary)
 }
 
-fn is_audio_file(path: &Path) -> bool {
+pub(crate) fn is_audio_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
         .unwrap_or(false)
 }
 
-fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error::Error>> {
+pub(crate) fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error::Error>> {
     let file_hash = hash_file(path)?;
 
     let tagged_file = Probe::open(path)?.read()?;

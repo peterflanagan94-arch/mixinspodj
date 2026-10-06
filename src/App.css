@@ -612,3 +612,11 @@ button:disabled {
   color: var(--cyan);
   font-weight: 700;
 }
+
+.watched-folder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}

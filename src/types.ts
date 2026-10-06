@@ -97,6 +97,7 @@ export type TraktorTrack = {
   artist: string | null;
   title: string | null;
   track_id: number | null;
+  searching: boolean;
 };
 
 export type TraktorStatus = {

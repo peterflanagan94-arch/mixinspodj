@@ -35,3 +35,12 @@ another number in both places also works.
 
 Note: Traktor sends the next track's details when you cue it, so the detected
 track can change slightly before you hear it.
+
+## Keeping your library up to date
+
+Add your music folders in **Settings → Select Music Folder**. MixInspo DJ then
+watches them and adds any new file within about 30 seconds, so a track you
+download and play in Traktor should be found. If it isn't in your folders yet,
+the yellow line under NOW PLAYING says it's still looking for about a minute.
+To stop watching a folder, use **Stop watching** in Settings. Your files aren't
+touched.

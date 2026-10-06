@@ -139,6 +139,30 @@ fn find_track_path_by_hash(conn: &Connection, file_hash: &str) -> Result<Option<
     .map_err(DbError::from)
 }
 
+/// Folders the app watches for new music, in the order they were added.
+pub fn list_library_folders(conn: &Connection) -> Result<Vec<String>, DbError> {
+    let mut stmt = conn.prepare("SELECT path FROM library_folders ORDER BY id")?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Stops watching a folder. Music files and their library entries are left as they are.
+pub fn remove_library_folder(conn: &Connection, path: &str) -> Result<(), DbError> {
+    conn.execute("DELETE FROM library_folders WHERE path = ?1", params![path])?;
+    Ok(())
+}
+
+/// Every file path already in the library, so a watcher can spot new files cheaply.
+pub fn known_track_paths(conn: &Connection) -> Result<std::collections::HashSet<String>, DbError> {
+    let mut stmt = conn.prepare("SELECT file_path FROM tracks")?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<std::collections::HashSet<_>, _>>()?;
+    Ok(rows)
+}
+
 pub fn count_tracks(conn: &Connection) -> Result<i64, DbError> {
     conn.query_row("SELECT count(*) FROM tracks", [], |row| row.get(0))
         .map_err(DbError::from)
@@ -442,5 +466,19 @@ mod tests {
 
         assert_eq!(find_track_by_artist_title(&conn, " higher place ", "DIAFONIE").unwrap(), Some(track_id));
         assert_eq!(find_track_by_artist_title(&conn, "Someone Else", "Diafonie").unwrap(), None);
+    }
+
+    #[test]
+    fn watched_folders_can_be_listed_and_removed_without_touching_tracks() {
+        let conn = connect_in_memory().unwrap();
+        upsert_library_folder(&conn, "/music/a").unwrap();
+        upsert_library_folder(&conn, "/music/b").unwrap();
+        upsert_track(&conn, &sample("/music/a/x.flac", "hash-x")).unwrap();
+
+        assert_eq!(list_library_folders(&conn).unwrap(), vec!["/music/a", "/music/b"]);
+        remove_library_folder(&conn, "/music/a").unwrap();
+        assert_eq!(list_library_folders(&conn).unwrap(), vec!["/music/b"]);
+        assert_eq!(count_tracks(&conn).unwrap(), 1);
+        assert!(known_track_paths(&conn).unwrap().contains("/music/a/x.flac"));
     }
 }

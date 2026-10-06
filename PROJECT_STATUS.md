@@ -561,3 +561,20 @@ seen live.
 **Known gaps:** detected plays are recorded as `manual`, not `detected`; the
 port is fixed at 8765 (no automatic re-selection); a track with no ARTIST tag
 can't be matched.
+
+## Watched folders and unmatched Traktor tracks
+
+- **Watched folders** are the folders added through Settings (`library_folders`).
+  Every 30 seconds the app indexes any audio file in them that isn't in the
+  library yet. Only new files are read, so checks stay cheap. Removing a folder
+  stops watching it and leaves the music and library entries alone.
+- **Unmatched Traktor tracks** keep being searched for, every 5 seconds for a
+  minute, indexing watched folders as they go. A file downloaded just before
+  playing should match once it's indexed. The yellow line reads "looking in
+  your folders…" meanwhile, then "not in your library". A newer track cancels
+  an older search.
+- **Verified live:** dropped a new tagged file into a watched folder and it was
+  indexed within 40 seconds with no manual scan.
+- **Not covered:** a track with no artist tag can't be matched, and a track that
+  never lives on this computer (a stream) has no file to find. Traktor's own
+  collection file isn't read yet.

@@ -81,6 +81,8 @@ function App() {
   const [detected, setDetected] = useState<TraktorTrack | null>(null);
   const playRef = useRef(playTrack);
   playRef.current = playTrack;
+  const refreshTracksRef = useRef(refreshTracks);
+  refreshTracksRef.current = refreshTracks;
 
   useEffect(() => {
     const unlistenTrack = listen<TraktorTrack>("traktor-track", (event) => {
@@ -92,12 +94,16 @@ function App() {
         setDetected(track);
       }
     });
+    const unlistenLibrary = listen("library-updated", () => {
+      void refreshTracksRef.current();
+    });
     const unlistenStatus = listen<TraktorStatus>("traktor-status", (event) => {
       setTraktorStatus(event.payload);
     });
     return () => {
       unlistenTrack.then((f) => f());
       unlistenStatus.then((f) => f());
+      unlistenLibrary.then((f) => f());
     };
   }, []);
 
@@ -159,7 +165,8 @@ function App() {
       <NowPlaying track={nowPlaying} onPick={() => setSearchOpen(true)} onDropTrack={playTrack} />
       {detected && (
         <div className="detected-line">
-          Traktor: {detected.artist ?? "Unknown artist"} — {detected.title ?? "Untitled"} · not in your library
+          Traktor: {detected.artist ?? "Unknown artist"} — {detected.title ?? "Untitled"} ·{" "}
+          {detected.searching ? "looking in your folders…" : "not in your library"}
         </div>
       )}
 
