@@ -246,10 +246,10 @@ button {
 .track-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 6px;
-  border-radius: 4px;
-  margin-bottom: 2px;
+  gap: 10px;
+  padding: 9px 8px;
+  border-radius: 6px;
+  margin-bottom: 3px;
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
@@ -282,25 +282,79 @@ button {
   flex: 1;
 }
 
-.track-row-title-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-}
-
 .track-row-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 12.5px;
+  font-size: 15px;
   font-weight: 600;
+  line-height: 1.25;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.track-row-score {
+.track-row-artist {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-row-stats {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-row-bpm {
+  width: 30px;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.track-row-key {
+  min-width: 36px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--bg-raised);
+}
+
+.track-row-score-col {
+  flex-shrink: 0;
+  width: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.score-bar {
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.score-fill {
+  height: 100%;
+  background: var(--cyan);
+  border-radius: 3px;
+}
+
+.score-fill-partial {
+  opacity: 0.4;
+}
+
+.track-row-score {
   font-size: 12px;
   font-weight: 700;
   color: var(--cyan);
@@ -311,30 +365,6 @@ button {
   margin-left: 1px;
   color: var(--text-tertiary);
   font-weight: 400;
-}
-
-.track-row-meta {
-  display: flex;
-  gap: 8px;
-  font-size: 10.5px;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.track-row-meta span:first-child {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.track-row-reason {
-  margin-top: 1px;
-  font-size: 10px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ===== Filter row (bottom) ===== */

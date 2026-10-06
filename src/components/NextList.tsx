@@ -1,3 +1,4 @@
+import { CSSProperties } from "react";
 import { ScoredTrack, TrackSummary, TRACK_DRAG_MIME } from "../types";
 
 type Props = {
@@ -12,16 +13,15 @@ type Props = {
 };
 
 /**
- * Compact recommendation rows, scored by mixflow-recommender (M5) —
- * BPM, harmonic/key, energy, genre, and era compatibility, weighted by
- * the active mode. A PARTIAL_DATA badge means some of those couldn't be
- * computed (the track hasn't been analyzed, say) — shown as "~on the
- * score rather than hidden, so the DJ knows it's not full-confidence.
- * UNSCORED (no usable data at all) shows "—" instead of "0%": a true
- * zero would wrongly read as "bad match" rather than "unknown."
+ * Suggestion rows, built to be read at a glance: title and artist large, BPM
+ * and key in fixed columns, and the score as a bar. Keys are coloured by their
+ * Camelot number, so a harmonic match stands out without reading the code. The
+ * reason for the score sits in the row's tooltip rather than on screen.
  *
- * Each row is a real HTML5 drag source (M4) — drag it onto NOW PLAYING
- * to switch to it.
+ * A PARTIAL_DATA score is drawn faded with a "~" because some of its parts
+ * couldn't be computed. UNSCORED shows "—": a true zero would read as a bad match.
+ *
+ * Each row is a real HTML5 drag source — drag it onto NOW PLAYING to switch to it.
  */
 export function NextList({ tracks, nowPlayingId, recommendations, needsAnalysis, analysing }: Props) {
   if (nowPlayingId !== null && needsAnalysis) {
@@ -51,6 +51,7 @@ export function NextList({ tracks, nowPlayingId, recommendations, needsAnalysis,
       {rows.map(({ scored, track }) => {
         const unscored = scored.badges.includes("UNSCORED");
         const partial = scored.badges.includes("PARTIAL_DATA");
+        const percent = Math.round(scored.score_percent);
         const topReason = scored.components[0]?.explanation;
         const playedTime = scored.played_at?.slice(11, 16) ?? null;
 
@@ -58,6 +59,7 @@ export function NextList({ tracks, nowPlayingId, recommendations, needsAnalysis,
           <div
             className={`track-row ${playedTime ? "track-row-played" : ""}`}
             key={track.id}
+            title={topReason}
             draggable
             onDragStart={(e) => {
               e.dataTransfer.setData(TRACK_DRAG_MIME, String(track.id));
@@ -68,27 +70,46 @@ export function NextList({ tracks, nowPlayingId, recommendations, needsAnalysis,
               ⋮⋮
             </span>
             <div className="track-row-main">
-              <div className="track-row-title-line">
-                <span className="track-row-title">{track.title ?? "Untitled"}</span>
-                <span className="track-row-score">
-                  {unscored ? "—" : `${Math.round(scored.score_percent)}%`}
-                  {partial && <span className="track-row-partial">~</span>}
-                </span>
+              <div className="track-row-title">{track.title ?? "Untitled"}</div>
+              <div className="track-row-artist">{track.artist ?? "Unknown artist"}</div>
+              {playedTime && <div className="track-row-played-tag">PLAYED {playedTime}</div>}
+            </div>
+            <div className="track-row-stats">
+              <span className="track-row-bpm">{track.bpm !== null ? Math.round(track.bpm) : "—"}</span>
+              <span className="track-row-key" style={keyStyle(track.camelot_key)}>
+                {track.camelot_key ?? "—"}
+              </span>
+            </div>
+            <div className="track-row-score-col">
+              <div className="score-bar" aria-hidden>
+                <div
+                  className={`score-fill ${partial ? "score-fill-partial" : ""}`}
+                  style={{ width: unscored ? "0%" : `${percent}%` }}
+                />
               </div>
-              <div className="track-row-meta">
-                <span>{track.artist ?? "Unknown artist"}</span>
-                <span>{track.bpm !== null ? Math.round(track.bpm) : "—"}</span>
-                <span>{track.camelot_key ?? "—"}</span>
-              </div>
-              {playedTime ? (
-                <div className="track-row-played-tag">PLAYED {playedTime}</div>
-              ) : (
-                topReason && <div className="track-row-reason">{topReason}</div>
-              )}
+              <span className="track-row-score">
+                {unscored ? "—" : `${percent}%`}
+                {partial && <span className="track-row-partial">~</span>}
+              </span>
             </div>
           </div>
         );
       })}
     </div>
   );
+}
+
+/**
+ * A colour per Camelot number: the wheel's 12 positions spaced evenly round the
+ * hue circle, so neighbouring keys (the ones that mix well) get neighbouring
+ * colours. Minor keys (A) are darker than majors (B).
+ */
+function keyStyle(camelot: string | null): CSSProperties {
+  if (!camelot) return {};
+  const match = camelot.match(/^(\d{1,2})([AB])$/);
+  if (!match) return {};
+  const number = Number(match[1]);
+  const hue = ((number - 1) * 30) % 360;
+  const lightness = match[2] === "A" ? 30 : 42;
+  return { background: `hsl(${hue} 55% ${lightness}%)` };
 }
