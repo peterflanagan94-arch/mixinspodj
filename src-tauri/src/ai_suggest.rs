@@ -90,18 +90,92 @@ pub fn clear_ai_api_key(app: AppHandle) -> Result<(), String> {
     settings::save(&app, &current)
 }
 
+/// The angle AI Suggestions is asked to take. Each is cached separately per
+/// song, since they're genuinely different questions, not just relabelled
+/// versions of the same answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Category {
+    /// The balanced, default judgment — genre, era, energy and mood together.
+    Balanced,
+    SimilarBpm,
+    SimilarGenre,
+    /// Broadly popular, well-known crowd-pleasers — from the AI's own
+    /// general knowledge, applied fresh to this DJ's real library each
+    /// time. Never a copied or scraped chart.
+    Popular,
+    /// A deliberate reset, not a smooth transition: the single most
+    /// reliable, guaranteed-to-work song to fill the floor, even if it
+    /// doesn't match the current tempo, key or genre at all.
+    Wildcard,
+}
+
+impl Category {
+    fn parse(raw: Option<&str>) -> Self {
+        match raw.unwrap_or("balanced") {
+            "similar_bpm" => Self::SimilarBpm,
+            "similar_genre" => Self::SimilarGenre,
+            "popular" => Self::Popular,
+            "wildcard" => Self::Wildcard,
+            _ => Self::Balanced,
+        }
+    }
+
+    fn cache_key(self) -> &'static str {
+        match self {
+            Self::Balanced => "balanced",
+            Self::SimilarBpm => "similar_bpm",
+            Self::SimilarGenre => "similar_genre",
+            Self::Popular => "popular",
+            Self::Wildcard => "wildcard",
+        }
+    }
+
+    /// The one sentence that changes what the AI actually optimises for.
+    fn instruction(self) -> &'static str {
+        match self {
+            Self::Balanced => {
+                "Use what you know about each song's genre, era, energy and mood to judge \
+                 which ones would work well played right after the now-playing track for a \
+                 general crowd."
+            }
+            Self::SimilarBpm => {
+                "Prioritise tracks whose BPM is closest to the now-playing track's tempo, even \
+                 if the genre or style differs — tempo match matters most here."
+            }
+            Self::SimilarGenre => {
+                "Prioritise tracks that share the now-playing track's genre or musical style, \
+                 even if the tempo differs more than usual — style match matters most here."
+            }
+            Self::Popular => {
+                "Prioritise broadly popular, well-known, crowd-pleasing tracks from the list, \
+                 using what you know about which songs are widely popular — over tracks that \
+                 merely match the tempo or genre closely."
+            }
+            Self::Wildcard => {
+                "This is a deliberate reset, not a smooth transition. Ignore tempo, key and \
+                 genre fit entirely. Pick the tracks from the list you're most confident would \
+                 reliably fill the dancefloor on their own reputation, for almost any crowd — \
+                 the biggest, most universally known floor-fillers, even if they clash \
+                 completely with what's playing now."
+            }
+        }
+    }
+}
+
 /// Asks Claude for suggestions, or — unless `force` is set — reuses the
-/// answer from the last time this exact song was asked about on this
-/// machine. The cache is keyed by title and artist, not a library row, so
-/// it's shared across duplicate copies of the same track, and still applies
-/// after a rescan changes a track's id.
+/// answer from the last time this exact song and category was asked about
+/// on this machine. The cache is keyed by title, artist and category, not a
+/// library row, so it's shared across duplicate copies of the same track,
+/// and still applies after a rescan changes a track's id.
 #[tauri::command(async)]
 pub async fn ai_suggestions(
     app: AppHandle,
     db: State<'_, DbState>,
     now_playing_id: i64,
+    category: Option<String>,
     force: Option<bool>,
 ) -> Result<AiSuggestionResult, String> {
+    let category = Category::parse(category.as_deref());
     let (now_title, now_artist) = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         now_playing_names(&conn, now_playing_id)?
@@ -111,7 +185,8 @@ pub async fn ai_suggestions(
     if !force.unwrap_or(false) {
         let cached = {
             let conn = db.0.lock().map_err(|e| e.to_string())?;
-            mixflow_db::ai_cache::get(&conn, &now_title, cache_artist).map_err(|e| e.to_string())?
+            mixflow_db::ai_cache::get(&conn, &now_title, cache_artist, category.cache_key())
+                .map_err(|e| e.to_string())?
         };
         if let Some(json) = cached {
             if let Ok(suggestions) = serde_json::from_str::<Vec<AiSuggestion>>(&json) {
@@ -137,12 +212,13 @@ pub async fn ai_suggestions(
         return Err("No other tracks with BPM and key yet to suggest from.".to_string());
     }
 
-    let reply = call_claude(api_key.as_deref(), &now_title, now_artist.as_deref(), &candidates).await?;
+    let reply =
+        call_claude(api_key.as_deref(), category, &now_title, now_artist.as_deref(), &candidates).await?;
     let suggestions = resolve_picks(&reply, &candidates);
 
     if let Ok(json) = serde_json::to_string(&suggestions) {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
-        let _ = mixflow_db::ai_cache::set(&conn, &now_title, cache_artist, &json);
+        let _ = mixflow_db::ai_cache::set(&conn, &now_title, cache_artist, category.cache_key(), &json);
     }
 
     Ok(AiSuggestionResult { suggestions, from_cache: false })
@@ -203,6 +279,7 @@ struct ClaudePick {
 
 async fn call_claude(
     api_key: Option<&str>,
+    category: Category,
     now_title: &str,
     now_artist: Option<&str>,
     candidates: &[Candidate],
@@ -224,14 +301,15 @@ async fn call_claude(
         .collect::<Vec<_>>()
         .join("\n");
 
-    let system = "You are helping a DJ pick what to mix in next. You'll be given the track \
-        playing now (title and artist only — no audio data) and a numbered list of real tracks \
-        from the DJ's own library, each with its actual BPM, Camelot key and genre. Pick only \
-        from this list. Use what you know about each song's genre, era, energy and mood to \
-        judge which ones would work well played right after the now-playing track for a general \
-        crowd. Respond with ONLY a JSON array, no other text, of your top 8 picks, each \
-        {\"n\": <candidate number>, \"fit\": <0-100, how good a fit>, \"reason\": \"<one short \
-        sentence>\"}, best first.";
+    let system = format!(
+        "You are helping a DJ pick what to mix in next. You'll be given the track playing now \
+         (title and artist only — no audio data) and a numbered list of real tracks from the \
+         DJ's own library, each with its actual BPM, Camelot key and genre. Pick only from this \
+         list. {} Respond with ONLY a JSON array, no other text, of your top 8 picks, each \
+         {{\"n\": <candidate number>, \"fit\": <0-100, how good a fit>, \"reason\": \"<one short \
+         sentence>\"}}, best first.",
+        category.instruction()
+    );
 
     let user = format!(
         "Now playing: \"{now_title}\" by {}\n\nCandidates:\n{list}",
@@ -307,6 +385,16 @@ fn resolve_picks(picks: &[ClaudePick], candidates: &[Candidate]) -> Vec<AiSugges
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_category_parses_from_its_own_cache_key_and_back() {
+        let all = [Category::Balanced, Category::SimilarBpm, Category::SimilarGenre, Category::Popular, Category::Wildcard];
+        for category in all {
+            assert_eq!(Category::parse(Some(category.cache_key())), category);
+        }
+        assert_eq!(Category::parse(None), Category::Balanced);
+        assert_eq!(Category::parse(Some("not-a-real-category")), Category::Balanced);
+    }
 
     fn candidate(id: i64, title: &str) -> Candidate {
         Candidate {

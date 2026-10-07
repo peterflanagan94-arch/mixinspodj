@@ -29,6 +29,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("migrations/0002_tempo_source.sql")),
         M::up(include_str!("migrations/0003_traktor_history.sql")),
         M::up(include_str!("migrations/0004_ai_suggestion_cache.sql")),
+        M::up(include_str!("migrations/0005_ai_cache_category.sql")),
     ])
 }
 

@@ -124,6 +124,44 @@ button {
   font-size: 12px;
   padding: 12px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.now-playing-empty-hint {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.listening-bar {
+  width: 100%;
+  max-width: 160px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-row);
+  overflow: hidden;
+}
+
+.listening-bar-fill {
+  height: 100%;
+  width: 40%;
+  border-radius: 2px;
+  background: var(--cyan);
+}
+
+.listening-bar-active .listening-bar-fill {
+  animation: listening-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes listening-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
 }
 
 .now-playing-drag-over {
@@ -284,6 +322,31 @@ button {
 .ai-ask {
   padding: 12px 10px;
   text-align: center;
+}
+
+.ai-category-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 10px 6px;
+}
+
+.ai-category-chip {
+  flex: 1 1 auto;
+  padding: 7px 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ai-category-chip-active {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--cyan), #8f7cff);
+  color: #0b0c0e;
 }
 
 /* A row built to glance at, not click-to-play: this app doesn't control

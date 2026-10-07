@@ -6,7 +6,6 @@ import { LogicalSize } from "@tauri-apps/api/dpi";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TopBar } from "./components/TopBar";
 import { NowPlaying } from "./components/NowPlaying";
-import { ModeRow } from "./components/ModeRow";
 import { StatusBar } from "./components/StatusBar";
 import { NextList } from "./components/NextList";
 import { SuggestionRow } from "./components/SuggestionRow";
@@ -15,7 +14,7 @@ import { TopPlayedPanel } from "./components/TopPlayedPanel";
 import { SetsPanel } from "./components/SetsPanel";
 import { AiSuggestResults } from "./components/AiSuggestResults";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { DirectionMode, EventContext, ScoredTrack, TraktorStatus, TraktorTrack, TrackSummary } from "./types";
+import { EventContext, ScoredTrack, TraktorStatus, TraktorTrack, TrackSummary } from "./types";
 import "./App.css";
 
 function App() {
@@ -25,7 +24,6 @@ function App() {
 
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [eventContext, setEventContext] = useState<EventContext>("WEDDING");
-  const [activeMode, setActiveMode] = useState<DirectionMode | null>(null);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [topPlayedOpen, setTopPlayedOpen] = useState(false);
@@ -66,7 +64,7 @@ function App() {
     try {
       const pick = await invoke<ScoredTrack | null>("random_suggestion", {
         nowPlayingId,
-        mode: activeMode ?? "KEEP",
+        mode: "KEEP",
       });
       const track = pick ? tracks.find((t) => t.id === pick.track_id) : undefined;
       setRandomPick(pick && track ? { scored: pick, track } : null);
@@ -106,7 +104,7 @@ function App() {
       await invoke("play_track", {
         trackId,
         previousTrackId: nowPlayingId,
-        mode: activeMode ?? "KEEP",
+        mode: "KEEP",
         rank: index >= 0 ? index + 1 : null,
         detected,
       });
@@ -160,7 +158,7 @@ function App() {
     }
     let cancelled = false;
     setRecommendationsLoading(true);
-    invoke<ScoredTrack[]>("recommend_next", { nowPlayingId, mode: activeMode ?? "KEEP" })
+    invoke<ScoredTrack[]>("recommend_next", { nowPlayingId, mode: "KEEP" })
       .then((result) => {
         if (!cancelled) setRecommendations(result);
       })
@@ -174,7 +172,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [nowPlayingId, activeMode, tracks]);
+  }, [nowPlayingId, tracks]);
 
   async function openLibrary() {
     const existing = await WebviewWindow.getByLabel("library");
@@ -212,7 +210,12 @@ function App() {
         onChangeEventContext={setEventContext}
       />
 
-      <NowPlaying track={nowPlaying} onPick={() => setSearchOpen(true)} onDropTrack={playTrack} />
+      <NowPlaying
+        track={nowPlaying}
+        traktorStatus={traktorStatus}
+        onPick={() => setSearchOpen(true)}
+        onDropTrack={playTrack}
+      />
       {detected && (
         <div className="detected-line">
           Traktor: {detected.artist ?? "Unknown artist"} — {detected.title ?? "Untitled"} ·{" "}
@@ -226,7 +229,7 @@ function App() {
           className={`source-btn ${suggestionSource === "style" ? "source-btn-active" : ""}`}
           onClick={() => setSuggestionSource("style")}
         >
-          Style
+          My Local
         </button>
         <button
           type="button"
@@ -236,8 +239,6 @@ function App() {
           AI Suggest
         </button>
       </div>
-
-      <ModeRow active={activeMode} onSelect={setActiveMode} />
 
       {suggestionSource === "style" && (
         <>

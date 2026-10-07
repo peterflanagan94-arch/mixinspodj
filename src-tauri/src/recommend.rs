@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use mixflow_db::plays;
-use mixflow_recommender::{score_candidates, Mode, TrackFeatures};
+use mixflow_recommender::{score_candidates, Mode, ScoredTrack, TrackFeatures};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use tauri::State;
@@ -11,6 +13,15 @@ use crate::DbState;
 /// whole library is cheap; sending thousands of rows across to the webview
 /// and having React build a row for each one is not.
 const RESULT_LIMIT: usize = 100;
+/// Of those, how many of the tail slots are set aside for a different key at
+/// a similar tempo. A library with hundreds of tracks in one key can
+/// otherwise crowd every other key out of the list entirely — those tracks
+/// would still mix fine on tempo alone, they just never get the chance to
+/// show up below the wall of exact-key matches.
+const VARIETY_RESERVED: usize = 20;
+/// "Similar tempo" for that reservation: within 6% of the now-playing BPM —
+/// the same threshold `bpm::score` already treats as a compatible match.
+const VARIETY_BPM_TOLERANCE: f32 = 0.06;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreComponentDto {
@@ -76,6 +87,57 @@ fn random_index(len: usize) -> usize {
     (value % len as u64) as usize
 }
 
+/// Keeps the top `limit - reserved` results exactly as scored (so the best,
+/// safest matches — same key, same tempo — still lead), then fills the
+/// remaining `reserved` slots from further down the list with the
+/// best-scoring tracks that are in a *different* key but still close in
+/// tempo, so a different key always gets a chance to show up rather than
+/// being buried under however many exact-key matches the library has.
+fn widen_with_variety(
+    mut results: Vec<ScoredTrack>,
+    now_playing: &TrackFeatures,
+    candidates_by_id: &HashMap<i64, &TrackFeatures>,
+    limit: usize,
+    reserved: usize,
+) -> Vec<ScoredTrack> {
+    let primary_len = limit.saturating_sub(reserved).min(results.len());
+    let rest = results.split_off(primary_len);
+    let mut primary = results;
+
+    let (Some(now_key), Some(now_bpm)) = (now_playing.camelot_key.as_deref(), now_playing.bpm) else {
+        primary.extend(rest.into_iter().take(limit - primary.len()));
+        return primary;
+    };
+
+    // Split what's left into "a different key at a similar tempo" (the
+    // variety this is for) and everything else, keeping each group's
+    // existing score order. If there isn't enough variety to fill all the
+    // reserved slots, the leftover slots are backfilled from the rest by
+    // score, same as before this existed — the list is never left short
+    // just because variety happened to be scarce.
+    let mut variety = Vec::with_capacity(reserved);
+    let mut backfill = Vec::new();
+    for candidate in rest {
+        let is_variety = variety.len() < reserved
+            && candidates_by_id.get(&candidate.track_id).is_some_and(|features| {
+                let (Some(key), Some(bpm)) = (features.camelot_key.as_deref(), features.bpm) else {
+                    return false;
+                };
+                key != now_key && ((bpm - now_bpm).abs() / now_bpm) <= VARIETY_BPM_TOLERANCE
+            });
+        if is_variety {
+            variety.push(candidate);
+        } else {
+            backfill.push(candidate);
+        }
+    }
+
+    primary.extend(variety);
+    let remaining = limit.saturating_sub(primary.len());
+    primary.extend(backfill.into_iter().take(remaining));
+    primary
+}
+
 fn score_for(
     conn: &Connection,
     session_id: i64,
@@ -99,12 +161,13 @@ fn score_for(
         candidate.transitions_from_now = transitions.get(&candidate.id).copied().unwrap_or(0);
     }
 
-    let mut results = score_candidates(&now_playing, &candidates, Mode::parse(mode));
     // Scoring every track is cheap (tens of milliseconds even for a large
     // library), but sending thousands of rows to the screen and having React
     // build a row for each one is not — that's what made switching modes feel
     // slow. Nothing past the top 100 is ever shown or drawn from.
-    results.truncate(RESULT_LIMIT);
+    let results = score_candidates(&now_playing, &candidates, Mode::parse(mode));
+    let candidates_by_id: HashMap<i64, &TrackFeatures> = candidates.iter().map(|c| (c.id, c)).collect();
+    let results = widen_with_variety(results, &now_playing, &candidates_by_id, RESULT_LIMIT, VARIETY_RESERVED);
 
     Ok(results
         .into_iter()
@@ -172,6 +235,67 @@ fn map_features(row: &rusqlite::Row) -> rusqlite::Result<TrackFeatures> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn features(id: i64, bpm: f32, key: &str) -> TrackFeatures {
+        TrackFeatures {
+            id,
+            bpm: Some(bpm),
+            camelot_key: Some(key.to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn scored(track_id: i64, score_percent: f32) -> ScoredTrack {
+        ScoredTrack { track_id, score_percent, components: vec![], badges: vec![] }
+    }
+
+    #[test]
+    fn a_different_key_at_a_similar_tempo_still_gets_a_chance() {
+        let now = features(0, 128.0, "8B");
+        // Five same-key "perfect" matches that would fill the whole list on
+        // score alone, plus one different-key track at a close tempo that
+        // would otherwise be pushed out entirely, and one different-key
+        // track too far off tempo to belong in the "widen" slots at all.
+        let library = vec![
+            features(1, 128.0, "8B"),
+            features(2, 128.0, "8B"),
+            features(3, 128.0, "8B"),
+            features(4, 128.0, "8B"),
+            features(5, 128.0, "8B"),
+            features(6, 129.0, "3A"),  // different key, close tempo
+            features(7, 170.0, "5A"),  // different key, nowhere near tempo
+        ];
+        let by_id: HashMap<i64, &TrackFeatures> = library.iter().map(|f| (f.id, f)).collect();
+        let results = vec![
+            scored(1, 100.0),
+            scored(2, 100.0),
+            scored(3, 100.0),
+            scored(4, 100.0),
+            scored(5, 100.0),
+            scored(6, 40.0),
+            scored(7, 10.0),
+        ];
+
+        // limit 6, with 2 reserved: the top 4 by score lead, then the
+        // reserved slots should prefer the close-tempo different key over
+        // more same-key tracks or the too-far-off one.
+        let widened = widen_with_variety(results, &now, &by_id, 6, 2);
+        let ids: Vec<i64> = widened.iter().map(|s| s.track_id).collect();
+        assert_eq!(ids.len(), 6);
+        assert!(ids.contains(&6), "the close-tempo different key should get a reserved slot: {ids:?}");
+        assert!(!ids.contains(&7), "the far-off-tempo track shouldn't take a reserved slot: {ids:?}");
+    }
+
+    #[test]
+    fn with_no_variety_available_the_reserved_slots_backfill_from_the_rest() {
+        let now = features(0, 128.0, "8B");
+        let library: Vec<TrackFeatures> = (1..=6).map(|i| features(i, 128.0, "8B")).collect();
+        let by_id: HashMap<i64, &TrackFeatures> = library.iter().map(|f| (f.id, f)).collect();
+        let results: Vec<ScoredTrack> = (1..=6).map(|i| scored(i, 100.0 - i as f32)).collect();
+
+        let widened = widen_with_variety(results, &now, &by_id, 6, 2);
+        assert_eq!(widened.len(), 6, "no variety candidates exist, so the list still reaches the limit");
+    }
 
     fn insert(conn: &Connection, path: &str, title: &str, artist: &str) -> i64 {
         conn.execute(
