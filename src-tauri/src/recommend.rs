@@ -7,6 +7,11 @@ use tauri::State;
 use crate::plays::CurrentSession;
 use crate::DbState;
 
+/// How many scored tracks NEXT (and Random's pool) ever sees. Scoring the
+/// whole library is cheap; sending thousands of rows across to the webview
+/// and having React build a row for each one is not.
+const RESULT_LIMIT: usize = 100;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreComponentDto {
     pub name: String,
@@ -94,7 +99,12 @@ fn score_for(
         candidate.transitions_from_now = transitions.get(&candidate.id).copied().unwrap_or(0);
     }
 
-    let results = score_candidates(&now_playing, &candidates, Mode::parse(mode));
+    let mut results = score_candidates(&now_playing, &candidates, Mode::parse(mode));
+    // Scoring every track is cheap (tens of milliseconds even for a large
+    // library), but sending thousands of rows to the screen and having React
+    // build a row for each one is not — that's what made switching modes feel
+    // slow. Nothing past the top 100 is ever shown or drawn from.
+    results.truncate(RESULT_LIMIT);
 
     Ok(results
         .into_iter()
@@ -185,6 +195,18 @@ mod tests {
     }
 
     #[test]
+    fn results_never_exceed_the_limit_even_with_a_huge_library() {
+        let conn = mixflow_db::connect_in_memory().unwrap();
+        let now_playing = insert(&conn, "/now.mp3", "Now Playing", "Someone");
+        for i in 0..(RESULT_LIMIT + 50) {
+            insert(&conn, &format!("/{i}.mp3"), &format!("Track {i}"), "Various");
+        }
+
+        let results = score_for(&conn, 1, now_playing, "KEEP").unwrap();
+        assert_eq!(results.len(), RESULT_LIMIT);
+    }
+
+    #[test]
     fn a_different_mix_of_the_same_song_is_still_suggested() {
         let conn = mixflow_db::connect_in_memory().unwrap();
         let now_playing = insert(&conn, "/a.mp3", "Saturday Night", "Whigfield");
@@ -195,3 +217,4 @@ mod tests {
         assert!(ids.contains(&remix), "a differently-titled version is a different track");
     }
 }
+
