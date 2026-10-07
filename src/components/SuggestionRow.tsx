@@ -5,6 +5,8 @@ type Props = {
   artist: string | null;
   bpm: number | null;
   camelotKey: string | null;
+  /** 1-10. Shown so BUILD/COOL read as a direction, not just a tied score. */
+  energy?: number | null;
   /** 0-100, shown bold and large — the one number to glance at. */
   score: number | null;
   /** Shown as a dash for a track with no usable score (not yet analysed). */
@@ -18,7 +20,7 @@ type Props = {
  * there's no Play button. Clicking copies "Artist - Title" to the clipboard
  * instead, ready to paste into Traktor's own search.
  */
-export function SuggestionRow({ title, artist, bpm, camelotKey, score, unscored, reason, playedTime }: Props) {
+export function SuggestionRow({ title, artist, bpm, camelotKey, energy, score, unscored, reason, playedTime }: Props) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -46,6 +48,7 @@ export function SuggestionRow({ title, artist, bpm, camelotKey, score, unscored,
         <span className="suggestion-row-key" style={keyStyle(camelotKey)}>
           {camelotKey ?? "—"}
         </span>
+        {energy != null && <span className="suggestion-row-energy">E{Math.round(energy)}</span>}
       </div>
       <div className="suggestion-row-score">{unscored || score === null ? "—" : Math.round(score)}</div>
     </button>

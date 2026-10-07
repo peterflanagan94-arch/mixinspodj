@@ -367,6 +367,14 @@ button {
   background: var(--bg-raised);
 }
 
+.suggestion-row-energy {
+  width: 22px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .suggestion-row-score {
   flex-shrink: 0;
   width: 34px;
@@ -694,4 +702,25 @@ button:disabled {
   margin: 0 10px 6px;
   border: 1px solid var(--cyan-dim);
   border-radius: 6px;
+}
+
+.ai-cache-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px 8px;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.ai-ask-again {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border: 1px solid var(--cyan);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyan);
+  font-size: 10.5px;
+  font-weight: 700;
 }

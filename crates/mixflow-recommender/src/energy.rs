@@ -20,10 +20,16 @@ pub fn score(now_energy: Option<f32>, candidate_energy: Option<f32>, mode: Mode)
     let now = now_energy?;
     let delta = candidate - now;
 
+    // KEEP, BUILD and COOL's bands don't touch — there's a small gap between
+    // each pair (0.75 to 1.0, and -1.0 to -0.75) where nothing scores full
+    // marks. Without that gap a mild energy bump (delta +0.6, say) scored
+    // 1.0 under both KEEP and BUILD, so picking a mode barely changed the
+    // list. SWITCH stays wide — it only needs to rule out a jarring change,
+    // not pick a direction.
     let (target_low, target_high, on_target_label): (f32, f32, &'static str) = match mode {
-        Mode::Keep => (-1.0, 1.0, "Holds the energy"),
-        Mode::Build => (0.5, 3.0, "Energy increase"),
-        Mode::Cool => (-3.0, -0.5, "Energy decrease"),
+        Mode::Keep => (-0.75, 0.75, "Holds the energy"),
+        Mode::Build => (1.0, 3.5, "Energy increase"),
+        Mode::Cool => (-3.5, -1.0, "Energy decrease"),
         Mode::Switch => (-2.0, 2.0, "Energy stays workable"),
         Mode::Rescue => unreachable!("handled above"),
     };
@@ -32,13 +38,15 @@ pub fn score(now_energy: Option<f32>, candidate_energy: Option<f32>, mode: Mode)
         return Some((1.0, on_target_label));
     }
 
-    // Outside the target band: decay with distance from the nearer edge.
+    // Outside the target band: decay with distance from the nearer edge,
+    // steeply enough that the wrong mode's best matches are visibly lower,
+    // not just a rounding error away from 100%.
     let distance = if delta < target_low {
         target_low - delta
     } else {
         delta - target_high
     };
-    let value = (1.0 - distance / 4.0).max(0.0);
+    let value = (1.0 - distance / 3.0).max(0.0);
     Some((value, "Energy direction doesn't fit the mode"))
 }
 
@@ -88,6 +96,16 @@ mod tests {
     fn rescue_penalizes_low_energy_even_if_close_to_current() {
         let (value, _) = score(Some(3.0), Some(3.2), Mode::Rescue).unwrap();
         assert!(value < 0.5, "value: {value}");
+    }
+
+    #[test]
+    fn keep_and_build_no_longer_both_give_full_marks_to_the_same_track() {
+        // A delta that used to sit inside both bands (0.5 to 1.0) now falls
+        // short of full marks in either — the deliberate gap between modes.
+        let (keep, _) = score(Some(6.0), Some(6.9), Mode::Keep).unwrap();
+        let (build, _) = score(Some(6.0), Some(6.9), Mode::Build).unwrap();
+        assert!(keep < 1.0, "keep: {keep}");
+        assert!(build < 1.0, "build: {build}");
     }
 
     #[test]

@@ -21,7 +21,7 @@ const ANTHROPIC_VERSION: &str = "2023-06-01";
 /// ~5,700 input tokens for 150 candidates, a fraction of a cent per call.
 const CANDIDATE_POOL: usize = 150;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiSuggestion {
     pub track_id: i64,
     pub title: String,
@@ -32,6 +32,14 @@ pub struct AiSuggestion {
     /// the same glance-at number as NEXT's local score.
     pub fit: u8,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AiSuggestionResult {
+    pub suggestions: Vec<AiSuggestion>,
+    /// True when this came from a past request for this song, not a fresh
+    /// call to Claude — so the screen can say so, and offer to ask again.
+    pub from_cache: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -63,29 +71,58 @@ pub fn clear_ai_api_key(app: AppHandle) -> Result<(), String> {
     settings::save(&app, &current)
 }
 
+/// Asks Claude for suggestions, or — unless `force` is set — reuses the
+/// answer from the last time this exact song was asked about on this
+/// machine. The cache is keyed by title and artist, not a library row, so
+/// it's shared across duplicate copies of the same track, and still applies
+/// after a rescan changes a track's id.
 #[tauri::command(async)]
 pub async fn ai_suggestions(
     app: AppHandle,
     db: State<'_, DbState>,
     now_playing_id: i64,
-) -> Result<Vec<AiSuggestion>, String> {
+    force: Option<bool>,
+) -> Result<AiSuggestionResult, String> {
+    let (now_title, now_artist) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        now_playing_names(&conn, now_playing_id)?
+    };
+    let cache_artist = now_artist.as_deref().unwrap_or("");
+
+    if !force.unwrap_or(false) {
+        let cached = {
+            let conn = db.0.lock().map_err(|e| e.to_string())?;
+            mixflow_db::ai_cache::get(&conn, &now_title, cache_artist).map_err(|e| e.to_string())?
+        };
+        if let Some(json) = cached {
+            if let Ok(suggestions) = serde_json::from_str::<Vec<AiSuggestion>>(&json) {
+                return Ok(AiSuggestionResult { suggestions, from_cache: true });
+            }
+        }
+    }
+
     let api_key = settings::load(&app)
         .anthropic_api_key
         .filter(|k| !k.trim().is_empty())
         .ok_or("Add your Anthropic API key in Settings → AI Suggestions first.")?;
 
-    let (now_title, now_artist, candidates) = {
+    let candidates = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
-        let (title, artist) = now_playing_names(&conn, now_playing_id)?;
-        let candidates = load_candidates(&conn, now_playing_id)?;
-        (title, artist, candidates)
+        load_candidates(&conn, now_playing_id)?
     };
     if candidates.is_empty() {
         return Err("No other tracks with BPM and key yet to suggest from.".to_string());
     }
 
     let reply = call_claude(&api_key, &now_title, now_artist.as_deref(), &candidates).await?;
-    Ok(resolve_picks(&reply, &candidates))
+    let suggestions = resolve_picks(&reply, &candidates);
+
+    if let Ok(json) = serde_json::to_string(&suggestions) {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let _ = mixflow_db::ai_cache::set(&conn, &now_title, cache_artist, &json);
+    }
+
+    Ok(AiSuggestionResult { suggestions, from_cache: false })
 }
 
 fn now_playing_names(conn: &Connection, track_id: i64) -> Result<(String, Option<String>), String> {

@@ -53,6 +53,7 @@ export function NextList({ tracks, nowPlayingId, recommendations, needsAnalysis,
             artist={track.artist}
             bpm={track.bpm}
             camelotKey={track.camelot_key}
+            energy={track.energy}
             score={scored.score_percent}
             unscored={unscored}
             reason={scored.components[0]?.explanation}

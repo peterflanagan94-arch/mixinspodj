@@ -263,6 +263,7 @@ function App() {
                 artist={randomPick.track.artist}
                 bpm={randomPick.track.bpm}
                 camelotKey={randomPick.track.camelot_key}
+                energy={randomPick.track.energy}
                 score={randomPick.scored.score_percent}
                 reason={randomPick.scored.components[0]?.explanation}
               />

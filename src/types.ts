@@ -174,3 +174,8 @@ export type AiSuggestion = {
   fit: number;
   reason: string;
 };
+
+export type AiSuggestionResult = {
+  suggestions: AiSuggestion[];
+  from_cache: boolean;
+};

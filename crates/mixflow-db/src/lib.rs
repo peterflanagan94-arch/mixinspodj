@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
 use std::path::Path;
 
+pub mod ai_cache;
 pub mod backup;
 pub mod history;
 pub mod library;
@@ -27,6 +28,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("migrations/0001_init.sql")),
         M::up(include_str!("migrations/0002_tempo_source.sql")),
         M::up(include_str!("migrations/0003_traktor_history.sql")),
+        M::up(include_str!("migrations/0004_ai_suggestion_cache.sql")),
     ])
 }
 
