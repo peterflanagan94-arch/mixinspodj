@@ -388,36 +388,51 @@ button {
 /* ===== Filter row (bottom) ===== */
 .filter-row {
   display: flex;
-  gap: 5px;
+  align-items: center;
+  justify-content: center;
   padding: 7px 10px;
   border-top: 1px solid var(--border);
   background-color: var(--bg-raised);
-  overflow-x: auto;
   flex-shrink: 0;
 }
 
-.filter-chip {
+.traktor-status {
   flex-shrink: 0;
-  border: 1px solid var(--border);
-  background: var(--bg-row);
-  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
   border-radius: 999px;
-  padding: 4px 9px;
-  font-size: 10px;
+  border: 1px solid var(--border);
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  white-space: nowrap;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  cursor: default;
 }
 
-.filter-chip:hover {
-  color: var(--text-primary);
+.traktor-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.filter-chip-active {
-  border-color: var(--cyan);
-  background: var(--cyan-wash);
-  color: var(--cyan);
+.traktor-dot-connected {
+  background: var(--cyan);
+  box-shadow: 0 0 4px var(--cyan);
+}
+
+.traktor-dot-waiting {
+  background: var(--yellow);
+}
+
+.traktor-dot-error {
+  background: var(--danger);
+}
+
+.traktor-dot-starting {
+  background: var(--text-tertiary);
 }
 
 /* ===== Panels (Search / Settings) ===== */

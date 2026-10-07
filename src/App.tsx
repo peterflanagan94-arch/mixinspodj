@@ -7,7 +7,7 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TopBar } from "./components/TopBar";
 import { NowPlaying } from "./components/NowPlaying";
 import { ModeRow } from "./components/ModeRow";
-import { FilterRow, Filter } from "./components/FilterRow";
+import { StatusBar } from "./components/StatusBar";
 import { NextList } from "./components/NextList";
 import { SuggestionRow } from "./components/SuggestionRow";
 import { SearchPanel } from "./components/SearchPanel";
@@ -26,7 +26,6 @@ function App() {
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [eventContext, setEventContext] = useState<EventContext>("WEDDING");
   const [activeMode, setActiveMode] = useState<DirectionMode | null>(null);
-  const [activeFilters, setActiveFilters] = useState<Filter[]>([]);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [topPlayedOpen, setTopPlayedOpen] = useState(false);
@@ -281,12 +280,7 @@ function App() {
 
       {suggestionSource === "ai" && <AiSuggestResults nowPlayingId={nowPlayingId} />}
 
-      <FilterRow
-        active={activeFilters}
-        onToggle={(f) =>
-          setActiveFilters((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]))
-        }
-      />
+      <StatusBar traktorStatus={traktorStatus} />
 
       <SetsPanel open={setsOpen} onClose={() => setSetsOpen(false)} />
       <TopPlayedPanel
