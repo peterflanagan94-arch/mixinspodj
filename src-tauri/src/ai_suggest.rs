@@ -25,8 +25,8 @@ const MODEL: &str = "claude-haiku-5-5";
 const ANTHROPIC_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 /// MixInspo's own shared proxy (`server/ai-proxy/`), used when the DJ hasn't
-/// set their own key. Empty until deployed — see that folder's README.
-const PROXY_URL: &str = "";
+/// set their own key.
+const PROXY_URL: &str = "https://mixinspo-ai-proxy.mixinspodjsoftware.workers.dev";
 /// Enough for real variety without an oversized prompt; validated live at
 /// ~5,700 input tokens for 150 candidates, a fraction of a cent per call.
 const CANDIDATE_POOL: usize = 150;
@@ -363,4 +363,5 @@ mod tests {
         assert!(parse_picks("sorry, I can't help with that").is_err());
     }
 }
+
 
