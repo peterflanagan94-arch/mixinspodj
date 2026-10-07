@@ -127,10 +127,20 @@ fn load_features(conn: &Connection, track_id: i64) -> rusqlite::Result<Option<Tr
     .or_else(|e| if e == rusqlite::Error::QueryReturnedNoRows { Ok(None) } else { Err(e) })
 }
 
+/// Every other track, excluding the one playing now and — since the library
+/// can hold more than one file of the same song (a duplicate download, a
+/// re-rip) — anything that shares its title and artist. Suggesting a
+/// duplicate of what's already playing is the same mistake as suggesting the
+/// track itself.
 fn load_candidate_features(conn: &Connection, exclude_id: i64) -> rusqlite::Result<Vec<TrackFeatures>> {
     let mut stmt = conn.prepare(
         "SELECT id, bpm, camelot_key, energy, genre, year FROM tracks \
-         WHERE id != ?1 AND missing_file = 0",
+         WHERE id != ?1 AND missing_file = 0 \
+         AND NOT ( \
+             title IS NOT NULL AND artist IS NOT NULL \
+             AND lower(trim(title)) = (SELECT lower(trim(title)) FROM tracks WHERE id = ?1) \
+             AND lower(trim(artist)) = (SELECT lower(trim(artist)) FROM tracks WHERE id = ?1) \
+         )",
     )?;
     let rows = stmt.query_map(params![exclude_id], map_features)?.collect();
     rows
@@ -146,4 +156,42 @@ fn map_features(row: &rusqlite::Row) -> rusqlite::Result<TrackFeatures> {
         year: row.get(5)?,
         ..Default::default()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn insert(conn: &Connection, path: &str, title: &str, artist: &str) -> i64 {
+        conn.execute(
+            "INSERT INTO tracks (file_path, title, artist, bpm, camelot_key) VALUES (?1, ?2, ?3, 128.0, '8B')",
+            params![path, title, artist],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    #[test]
+    fn a_duplicate_of_the_now_playing_track_is_not_suggested() {
+        let conn = mixflow_db::connect_in_memory().unwrap();
+        let now_playing = insert(&conn, "/a.mp3", "Saturday Night", "Whigfield");
+        let duplicate = insert(&conn, "/b.mp3", "Saturday Night", "Whigfield");
+        let other = insert(&conn, "/c.mp3", "Other Track", "Someone Else");
+
+        let candidates = load_candidate_features(&conn, now_playing).unwrap();
+        let ids: Vec<i64> = candidates.iter().map(|t| t.id).collect();
+        assert!(!ids.contains(&duplicate), "a same-title-and-artist duplicate should be excluded");
+        assert!(ids.contains(&other));
+    }
+
+    #[test]
+    fn a_different_mix_of_the_same_song_is_still_suggested() {
+        let conn = mixflow_db::connect_in_memory().unwrap();
+        let now_playing = insert(&conn, "/a.mp3", "Saturday Night", "Whigfield");
+        let remix = insert(&conn, "/b.mp3", "Saturday Night - Radio Mix", "Whigfield");
+
+        let candidates = load_candidate_features(&conn, now_playing).unwrap();
+        let ids: Vec<i64> = candidates.iter().map(|t| t.id).collect();
+        assert!(ids.contains(&remix), "a differently-titled version is a different track");
+    }
 }
