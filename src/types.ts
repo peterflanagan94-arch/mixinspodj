@@ -171,5 +171,6 @@ export type AiSuggestion = {
   artist: string | null;
   bpm: number | null;
   camelot_key: string | null;
+  fit: number;
   reason: string;
 };

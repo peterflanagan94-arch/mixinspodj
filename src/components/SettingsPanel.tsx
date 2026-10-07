@@ -27,10 +27,26 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
   const [watchedFolders, setWatchedFolders] = useState<string[]>([]);
   const [traktorCollection, setTraktorCollection] = useState<string | null>(null);
   const [aiKeySet, setAiKeySet] = useState<boolean | null>(null);
+  const [aiKeyInput, setAiKeyInput] = useState("");
+  const [savingAiKey, setSavingAiKey] = useState(false);
 
   async function removeAiKey() {
     await invoke("clear_ai_api_key");
     setAiKeySet(false);
+  }
+
+  async function saveAiKey() {
+    if (!aiKeyInput.trim()) return;
+    setSavingAiKey(true);
+    try {
+      await invoke("set_ai_api_key", { key: aiKeyInput.trim() });
+      setAiKeyInput("");
+      setAiKeySet(true);
+    } catch (e) {
+      setScanError(String(e));
+    } finally {
+      setSavingAiKey(false);
+    }
   }
   const [traktorImport, setTraktorImport] = useState<ImportSummary | null>(null);
 
@@ -304,13 +320,28 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
           <div className="settings-section-label">AI Suggestions</div>
           <p className="hint">
             {aiKeySet === true
-              ? "An API key is saved. AI Suggestions sends the now-playing track and a sample of your library's titles, artists, BPM, key and genre to Anthropic's API only when you press \"Get suggestions\" there."
-              : "Add a key from the ✦ AI Suggestions button to use it."}
+              ? "An API key is saved. AI Suggestions sends the now-playing track and a sample of your library's titles, artists, BPM, key and genre to Anthropic's API only when you press \"Get AI suggestions\" there."
+              : "Add your own Anthropic API key to use the AI Suggest tab. It's sent only to Anthropic's API, from your computer, and nowhere else in the app uses the internet."}
           </p>
-          {aiKeySet === true && (
+          {aiKeySet === true ? (
             <button type="button" onClick={() => void removeAiKey()}>
               Remove key
             </button>
+          ) : (
+            <>
+              <input
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                className="panel-search-input"
+                placeholder="sk-ant-…"
+                value={aiKeyInput}
+                onChange={(e) => setAiKeyInput(e.target.value)}
+              />
+              <button type="button" disabled={savingAiKey} onClick={() => void saveAiKey()}>
+                {savingAiKey ? "Saving…" : "Save key"}
+              </button>
+            </>
           )}
         </div>
 

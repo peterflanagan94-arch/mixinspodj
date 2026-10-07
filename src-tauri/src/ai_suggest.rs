@@ -28,6 +28,9 @@ pub struct AiSuggestion {
     pub artist: Option<String>,
     pub bpm: Option<f64>,
     pub camelot_key: Option<String>,
+    /// How good a fit Claude judged it, 0-100 — shown as the row's score,
+    /// the same glance-at number as NEXT's local score.
+    pub fit: u8,
     pub reason: String,
 }
 
@@ -134,6 +137,7 @@ fn load_candidates(conn: &Connection, now_playing_id: i64) -> Result<Vec<Candida
 #[derive(Debug, Deserialize)]
 struct ClaudePick {
     n: usize,
+    fit: u8,
     reason: String,
 }
 
@@ -166,7 +170,8 @@ async fn call_claude(
         from this list. Use what you know about each song's genre, era, energy and mood to \
         judge which ones would work well played right after the now-playing track for a general \
         crowd. Respond with ONLY a JSON array, no other text, of your top 8 picks, each \
-        {\"n\": <candidate number>, \"reason\": \"<one short sentence>\"}, best first.";
+        {\"n\": <candidate number>, \"fit\": <0-100, how good a fit>, \"reason\": \"<one short \
+        sentence>\"}, best first.";
 
     let user = format!(
         "Now playing: \"{now_title}\" by {}\n\nCandidates:\n{list}",
@@ -225,6 +230,7 @@ fn resolve_picks(picks: &[ClaudePick], candidates: &[Candidate]) -> Vec<AiSugges
                 artist: candidate.artist.clone(),
                 bpm: candidate.bpm,
                 camelot_key: candidate.camelot_key.clone(),
+                fit: pick.fit,
                 reason: pick.reason.clone(),
             })
         })
@@ -250,20 +256,21 @@ mod tests {
     fn picks_resolve_to_the_candidate_at_that_position() {
         let candidates = vec![candidate(10, "First"), candidate(20, "Second"), candidate(30, "Third")];
         let picks = vec![
-            ClaudePick { n: 2, reason: "fits the vibe".into() },
-            ClaudePick { n: 1, reason: "same energy".into() },
+            ClaudePick { n: 2, fit: 88, reason: "fits the vibe".into() },
+            ClaudePick { n: 1, fit: 95, reason: "same energy".into() },
         ];
         let resolved = resolve_picks(&picks, &candidates);
         assert_eq!(resolved.len(), 2);
         assert_eq!(resolved[0].track_id, 20);
         assert_eq!(resolved[0].reason, "fits the vibe");
+        assert_eq!(resolved[0].fit, 88);
         assert_eq!(resolved[1].track_id, 10);
     }
 
     #[test]
     fn an_out_of_range_pick_is_dropped_not_crashed_on() {
         let candidates = vec![candidate(10, "Only One")];
-        let picks = vec![ClaudePick { n: 5, reason: "x".into() }, ClaudePick { n: 1, reason: "y".into() }];
+        let picks = vec![ClaudePick { n: 5, fit: 50, reason: "x".into() }, ClaudePick { n: 1, fit: 70, reason: "y".into() }];
         let resolved = resolve_picks(&picks, &candidates);
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].track_id, 10);
@@ -272,13 +279,13 @@ mod tests {
     #[test]
     fn a_zero_pick_is_dropped_not_crashed_on() {
         let candidates = vec![candidate(10, "Only One")];
-        let picks = vec![ClaudePick { n: 0, reason: "x".into() }];
+        let picks = vec![ClaudePick { n: 0, fit: 50, reason: "x".into() }];
         assert_eq!(resolve_picks(&picks, &candidates).len(), 0);
     }
 
     #[test]
     fn json_is_parsed_out_of_a_reply_with_surrounding_text() {
-        let text = "Here are my picks:\n[{\"n\": 3, \"reason\": \"good match\"}]\nHope that helps!";
+        let text = "Here are my picks:\n[{\"n\": 3, \"fit\": 90, \"reason\": \"good match\"}]\nHope that helps!";
         let picks = parse_picks(text).unwrap();
         assert_eq!(picks.len(), 1);
         assert_eq!(picks[0].n, 3);

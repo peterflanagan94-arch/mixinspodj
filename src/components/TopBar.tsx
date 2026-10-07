@@ -8,7 +8,6 @@ type Props = {
   onOpenSearch: () => void;
   onOpenTopPlayed: () => void;
   onOpenSets: () => void;
-  onOpenAiSuggestions: () => void;
   compact: boolean;
   onToggleCompact: () => void;
   onOpenLibrary: () => void;
@@ -24,7 +23,6 @@ export function TopBar({
   onOpenSearch,
   onOpenTopPlayed,
   onOpenSets,
-  onOpenAiSuggestions,
   compact,
   onToggleCompact,
   onOpenLibrary,
@@ -71,9 +69,6 @@ export function TopBar({
           onClick={onToggleCompact}
         >
           ▭
-        </button>
-        <button className="icon-btn" title="AI Suggestions" onClick={onOpenAiSuggestions}>
-          ✦
         </button>
         <button className="icon-btn" title="Your sets" onClick={onOpenSets}>
           ▤

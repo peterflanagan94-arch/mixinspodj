@@ -9,10 +9,11 @@ import { NowPlaying } from "./components/NowPlaying";
 import { ModeRow } from "./components/ModeRow";
 import { FilterRow, Filter } from "./components/FilterRow";
 import { NextList } from "./components/NextList";
+import { SuggestionRow } from "./components/SuggestionRow";
 import { SearchPanel } from "./components/SearchPanel";
 import { TopPlayedPanel } from "./components/TopPlayedPanel";
 import { SetsPanel } from "./components/SetsPanel";
-import { AiSuggestionsPanel } from "./components/AiSuggestionsPanel";
+import { AiSuggestResults } from "./components/AiSuggestResults";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { DirectionMode, EventContext, ScoredTrack, TraktorStatus, TraktorTrack, TrackSummary } from "./types";
 import "./App.css";
@@ -30,7 +31,7 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [topPlayedOpen, setTopPlayedOpen] = useState(false);
   const [setsOpen, setSetsOpen] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
+  const [suggestionSource, setSuggestionSource] = useState<"style" | "ai">("style");
   const [compact, setCompact] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -59,7 +60,7 @@ function App() {
     setAlwaysOnTop(next);
   }
 
-  const [randomPick, setRandomPick] = useState<TrackSummary | null>(null);
+  const [randomPick, setRandomPick] = useState<{ scored: ScoredTrack; track: TrackSummary } | null>(null);
 
   async function rollRandom() {
     if (nowPlayingId === null) return;
@@ -68,7 +69,8 @@ function App() {
         nowPlayingId,
         mode: activeMode ?? "KEEP",
       });
-      setRandomPick(pick ? (tracks.find((t) => t.id === pick.track_id) ?? null) : null);
+      const track = pick ? tracks.find((t) => t.id === pick.track_id) : undefined;
+      setRandomPick(pick && track ? { scored: pick, track } : null);
     } catch (e) {
       console.error("random_suggestion failed", e);
     }
@@ -204,7 +206,6 @@ function App() {
         onOpenSearch={() => setSearchOpen(true)}
         onOpenTopPlayed={() => setTopPlayedOpen(true)}
         onOpenSets={() => setSetsOpen(true)}
-        onOpenAiSuggestions={() => setAiOpen(true)}
         compact={compact}
         onToggleCompact={toggleCompact}
         onOpenLibrary={openLibrary}
@@ -220,43 +221,64 @@ function App() {
         </div>
       )}
 
-      <ModeRow active={activeMode} onSelect={setActiveMode} />
-
-      <div className="next-header">
-        <span>NEXT</span>
-        <span className="next-header-note">
-          {dbStatus.startsWith("connected") ? (recommendationsLoading ? "scoring…" : "") : dbStatus}
-        </span>
+      <div className="source-row">
         <button
           type="button"
-          className="random-btn"
-          disabled={nowPlayingId === null}
-          onClick={() => void rollRandom()}
-          title="A random track from your library that fits the one playing now"
+          className={`source-btn ${suggestionSource === "style" ? "source-btn-active" : ""}`}
+          onClick={() => setSuggestionSource("style")}
         >
-          Random
+          Style
+        </button>
+        <button
+          type="button"
+          className={`source-btn source-btn-ai ${suggestionSource === "ai" ? "source-btn-active" : ""}`}
+          onClick={() => setSuggestionSource("ai")}
+        >
+          AI Suggest
         </button>
       </div>
-      {randomPick && (
-        <div className="random-pick">
-          <span className="random-pick-text">
-            <b>{randomPick.title ?? "Untitled"}</b> — {randomPick.artist ?? "Unknown artist"}
-            {randomPick.bpm !== null ? ` · ${Math.round(randomPick.bpm)}` : ""}
-            {randomPick.camelot_key ? ` · ${randomPick.camelot_key}` : ""}
-          </span>
-          <button type="button" className="random-play" onClick={() => void playTrack(randomPick.id)}>
-            Play
-          </button>
-        </div>
+
+      <ModeRow active={activeMode} onSelect={setActiveMode} />
+
+      {suggestionSource === "style" && (
+        <>
+          <div className="next-header">
+            <span className="next-header-note">
+              {dbStatus.startsWith("connected") ? (recommendationsLoading ? "scoring…" : "") : dbStatus}
+            </span>
+            <button
+              type="button"
+              className="random-btn"
+              disabled={nowPlayingId === null}
+              onClick={() => void rollRandom()}
+              title="A random track from your library that fits the one playing now"
+            >
+              Random
+            </button>
+          </div>
+          {randomPick && (
+            <div className="random-pick">
+              <SuggestionRow
+                title={randomPick.track.title ?? "Untitled"}
+                artist={randomPick.track.artist}
+                bpm={randomPick.track.bpm}
+                camelotKey={randomPick.track.camelot_key}
+                score={randomPick.scored.score_percent}
+                reason={randomPick.scored.components[0]?.explanation}
+              />
+            </div>
+          )}
+          <NextList
+            tracks={tracks}
+            nowPlayingId={nowPlayingId}
+            recommendations={recommendations}
+            needsAnalysis={nowPlaying !== null && (nowPlaying.bpm === null || nowPlaying.camelot_key === null)}
+            analysing={analysingId === nowPlayingId}
+          />
+        </>
       )}
 
-      <NextList
-        tracks={tracks}
-        nowPlayingId={nowPlayingId}
-        recommendations={recommendations}
-        needsAnalysis={nowPlaying !== null && (nowPlaying.bpm === null || nowPlaying.camelot_key === null)}
-        analysing={analysingId === nowPlayingId}
-      />
+      {suggestionSource === "ai" && <AiSuggestResults nowPlayingId={nowPlayingId} />}
 
       <FilterRow
         active={activeFilters}
@@ -266,12 +288,6 @@ function App() {
       />
 
       <SetsPanel open={setsOpen} onClose={() => setSetsOpen(false)} />
-      <AiSuggestionsPanel
-        open={aiOpen}
-        onClose={() => setAiOpen(false)}
-        nowPlayingId={nowPlayingId}
-        onSelectTrack={(trackId) => void playTrack(trackId)}
-      />
       <TopPlayedPanel
         open={topPlayedOpen}
         onClose={() => setTopPlayedOpen(false)}
