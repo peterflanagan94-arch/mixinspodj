@@ -1,0 +1,9 @@
+name = "mixinspo-ai-proxy"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Created once with: npx wrangler kv namespace create AI_PROXY_KV
+# Then paste the id it prints in place of REPLACE_WITH_KV_ID below.
+[[kv_namespaces]]
+binding = "AI_PROXY_KV"
+id = "REPLACE_WITH_KV_ID"

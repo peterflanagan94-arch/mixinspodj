@@ -1,8 +1,14 @@
 //! AI Suggestions: asks Claude what it knows about the track playing now —
 //! genre, era, mood, the kind of thing BPM and key alone can't capture — to
 //! pick from a real sample of the DJ's own library. Separate from NEXT: this
-//! calls out to Anthropic's API with the DJ's own key, where everything else
-//! in the app works offline, so it only runs when the DJ asks for it.
+//! is the one part of the app that calls out to the internet, so it only
+//! runs when the DJ asks for it.
+//!
+//! Two ways to pay for the call: a DJ's own Anthropic API key (Settings →
+//! AI Suggestions), used directly — or, when none is set, MixInspo's own
+//! shared proxy (see `server/ai-proxy/`), which holds the real key
+//! server-side so a beta tester never needs their own account. Either way
+//! the request body is identical; only where it's sent differs.
 //!
 //! The model is asked to answer with candidate *numbers*, not track names —
 //! tested live, it paraphrases titles (drops remix tags, "ft." vs "Feat"),
@@ -16,7 +22,11 @@ use tauri::{AppHandle, State};
 use crate::{settings, DbState};
 
 const MODEL: &str = "claude-haiku-5-5";
+const ANTHROPIC_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
+/// MixInspo's own shared proxy (`server/ai-proxy/`), used when the DJ hasn't
+/// set their own key. Empty until deployed — see that folder's README.
+const PROXY_URL: &str = "";
 /// Enough for real variety without an oversized prompt; validated live at
 /// ~5,700 input tokens for 150 candidates, a fraction of a cent per call.
 const CANDIDATE_POOL: usize = 150;
@@ -55,6 +65,15 @@ struct Candidate {
 #[tauri::command]
 pub fn has_ai_api_key(app: AppHandle) -> bool {
     settings::load(&app).anthropic_api_key.is_some_and(|k| !k.trim().is_empty())
+}
+
+/// Whether AI Suggestions can be used at all right now — a personal key, or
+/// the shared proxy being configured. Settings uses `has_ai_api_key`
+/// specifically to show the personal-key override state; the AI Suggest
+/// screen uses this to decide whether to show the "get set up" message.
+#[tauri::command]
+pub fn ai_suggestions_available(app: AppHandle) -> bool {
+    has_ai_api_key(app) || !PROXY_URL.is_empty()
 }
 
 #[tauri::command]
@@ -101,10 +120,14 @@ pub async fn ai_suggestions(
         }
     }
 
-    let api_key = settings::load(&app)
-        .anthropic_api_key
-        .filter(|k| !k.trim().is_empty())
-        .ok_or("Add your Anthropic API key in Settings → AI Suggestions first.")?;
+    let api_key = settings::load(&app).anthropic_api_key.filter(|k| !k.trim().is_empty());
+    if api_key.is_none() && PROXY_URL.is_empty() {
+        return Err(
+            "AI Suggestions isn't set up yet. Add your own Anthropic API key in Settings → \
+             AI Suggestions, or ask whoever runs MixInspo to finish the shared setup."
+                .to_string(),
+        );
+    }
 
     let candidates = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -114,7 +137,7 @@ pub async fn ai_suggestions(
         return Err("No other tracks with BPM and key yet to suggest from.".to_string());
     }
 
-    let reply = call_claude(&api_key, &now_title, now_artist.as_deref(), &candidates).await?;
+    let reply = call_claude(api_key.as_deref(), &now_title, now_artist.as_deref(), &candidates).await?;
     let suggestions = resolve_picks(&reply, &candidates);
 
     if let Ok(json) = serde_json::to_string(&suggestions) {
@@ -179,7 +202,7 @@ struct ClaudePick {
 }
 
 async fn call_claude(
-    api_key: &str,
+    api_key: Option<&str>,
     now_title: &str,
     now_artist: Option<&str>,
     candidates: &[Candidate],
@@ -216,10 +239,17 @@ async fn call_claude(
     );
 
     let client = reqwest::Client::new();
-    let response = client
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", api_key)
-        .header("anthropic-version", ANTHROPIC_VERSION)
+    // A personal key goes straight to Anthropic, authenticated as normal.
+    // With none, the request goes to MixInspo's own proxy instead, which
+    // holds the real key server-side — the app never sends it.
+    let request = match api_key {
+        Some(key) => client
+            .post(ANTHROPIC_URL)
+            .header("x-api-key", key)
+            .header("anthropic-version", ANTHROPIC_VERSION),
+        None => client.post(PROXY_URL),
+    };
+    let response = request
         .header("content-type", "application/json")
         .json(&json!({
             "model": MODEL,
@@ -229,12 +259,12 @@ async fn call_claude(
         }))
         .send()
         .await
-        .map_err(|e| format!("Could not reach Anthropic: {e}"))?;
+        .map_err(|e| format!("Could not reach {}: {e}", if api_key.is_some() { "Anthropic" } else { "the AI Suggestions service" }))?;
 
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("Anthropic API error ({status}): {body}"));
+        return Err(format!("AI Suggestions error ({status}): {body}"));
     }
 
     let body: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;

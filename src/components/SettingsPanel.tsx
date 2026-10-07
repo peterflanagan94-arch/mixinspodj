@@ -320,8 +320,8 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
           <div className="settings-section-label">AI Suggestions</div>
           <p className="hint">
             {aiKeySet === true
-              ? "An API key is saved. AI Suggestions sends the now-playing track and a sample of your library's titles, artists, BPM, key and genre to Anthropic's API only when you press \"Get AI suggestions\" there."
-              : "Add your own Anthropic API key to use the AI Suggest tab. It's sent only to Anthropic's API, from your computer, and nowhere else in the app uses the internet."}
+              ? "Your own key is saved and used instead of the shared one. AI Suggestions sends the now-playing track and a sample of your library's titles, artists, BPM, key and genre only when you press \"Get AI suggestions\" there."
+              : "AI Suggestions works out of the box, through MixInspo's own shared service. Add your own Anthropic API key here only if you'd rather use that instead."}
           </p>
           {aiKeySet === true ? (
             <button type="button" onClick={() => void removeAiKey()}>

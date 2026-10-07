@@ -26,7 +26,7 @@ export function AiSuggestResults({ nowPlayingId }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke<boolean>("has_ai_api_key")
+    invoke<boolean>("ai_suggestions_available")
       .then(setHasKey)
       .catch(() => setHasKey(false));
   }, []);
@@ -59,7 +59,8 @@ export function AiSuggestResults({ nowPlayingId }: Props) {
   if (hasKey === false) {
     return (
       <div className="next-empty">
-        Add your Anthropic API key in Settings → AI Suggestions to use this.
+        AI Suggestions isn't set up yet. Add your own Anthropic API key in Settings → AI
+        Suggestions, or ask whoever runs MixInspo to finish the shared setup.
       </div>
     );
   }

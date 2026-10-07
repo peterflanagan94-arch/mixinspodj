@@ -130,6 +130,7 @@ pub fn run() {
             traktor_history::traktor_set_report,
             plays::set_report,
             ai_suggest::has_ai_api_key,
+            ai_suggest::ai_suggestions_available,
             ai_suggest::set_ai_api_key,
             ai_suggest::clear_ai_api_key,
             ai_suggest::ai_suggestions
