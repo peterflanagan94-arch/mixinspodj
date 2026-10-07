@@ -5,11 +5,11 @@
 //! browser or external tools. The user picks where the file is saved.
 
 use std::collections::HashMap;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::BufWriter;
 
 use mixflow_db::plays;
-use printpdf::{BuiltinFont, Color, IndirectFontRef, Line, Mm, PdfDocument, PdfDocumentReference, PdfLayerReference, Point, Polygon, Rgb};
+use printpdf::{BuiltinFont, Color, IndirectFontRef, Mm, PdfDocument, PdfDocumentReference, PdfLayerReference, Point, Polygon, Rgb};
 use rusqlite::Connection;
 use tauri::State;
 
@@ -410,6 +410,7 @@ fn truncate(text: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn session_file_names_read_as_a_time() {

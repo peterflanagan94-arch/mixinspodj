@@ -12,6 +12,12 @@ pub struct AppSettings {
     /// `collection.nml` under the usual Traktor folders is used.
     #[serde(default)]
     pub traktor_collection: Option<String>,
+    /// The DJ's own Anthropic API key, for AI Suggestions. There's no
+    /// MixInspo server to call the API through yet, so each DJ's own key
+    /// pays for their own use. Kept only in this local file, never sent
+    /// anywhere but straight to Anthropic's API.
+    #[serde(default)]
+    pub anthropic_api_key: Option<String>,
 }
 
 fn settings_path(app: &AppHandle) -> Option<PathBuf> {

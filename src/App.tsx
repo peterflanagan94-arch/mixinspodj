@@ -12,6 +12,7 @@ import { NextList } from "./components/NextList";
 import { SearchPanel } from "./components/SearchPanel";
 import { TopPlayedPanel } from "./components/TopPlayedPanel";
 import { SetsPanel } from "./components/SetsPanel";
+import { AiSuggestionsPanel } from "./components/AiSuggestionsPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { DirectionMode, EventContext, ScoredTrack, TraktorStatus, TraktorTrack, TrackSummary } from "./types";
 import "./App.css";
@@ -29,6 +30,7 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [topPlayedOpen, setTopPlayedOpen] = useState(false);
   const [setsOpen, setSetsOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -202,6 +204,7 @@ function App() {
         onOpenSearch={() => setSearchOpen(true)}
         onOpenTopPlayed={() => setTopPlayedOpen(true)}
         onOpenSets={() => setSetsOpen(true)}
+        onOpenAiSuggestions={() => setAiOpen(true)}
         compact={compact}
         onToggleCompact={toggleCompact}
         onOpenLibrary={openLibrary}
@@ -263,6 +266,12 @@ function App() {
       />
 
       <SetsPanel open={setsOpen} onClose={() => setSetsOpen(false)} />
+      <AiSuggestionsPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        nowPlayingId={nowPlayingId}
+        onSelectTrack={(trackId) => void playTrack(trackId)}
+      />
       <TopPlayedPanel
         open={topPlayedOpen}
         onClose={() => setTopPlayedOpen(false)}

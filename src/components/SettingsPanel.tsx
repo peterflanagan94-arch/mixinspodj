@@ -26,6 +26,12 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
 
   const [watchedFolders, setWatchedFolders] = useState<string[]>([]);
   const [traktorCollection, setTraktorCollection] = useState<string | null>(null);
+  const [aiKeySet, setAiKeySet] = useState<boolean | null>(null);
+
+  async function removeAiKey() {
+    await invoke("clear_ai_api_key");
+    setAiKeySet(false);
+  }
   const [traktorImport, setTraktorImport] = useState<ImportSummary | null>(null);
 
   async function loadTraktorCollection() {
@@ -67,6 +73,7 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
     if (open) {
       void loadWatchedFolders();
       void loadTraktorCollection();
+      invoke<boolean>("has_ai_api_key").then(setAiKeySet).catch(() => setAiKeySet(false));
     }
   }, [open]);
 
@@ -291,6 +298,20 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
                 ? "waiting for Traktor"
                 : "starting…"}
           </p>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">AI Suggestions</div>
+          <p className="hint">
+            {aiKeySet === true
+              ? "An API key is saved. AI Suggestions sends the now-playing track and a sample of your library's titles, artists, BPM, key and genre to Anthropic's API only when you press \"Get suggestions\" there."
+              : "Add a key from the ✦ AI Suggestions button to use it."}
+          </p>
+          {aiKeySet === true && (
+            <button type="button" onClick={() => void removeAiKey()}>
+              Remove key
+            </button>
+          )}
         </div>
 
         <div className="settings-section">

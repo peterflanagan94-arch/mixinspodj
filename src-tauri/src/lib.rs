@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use tauri::Manager;
 
+mod ai_suggest;
 mod analysis;
 mod export;
 mod broadcast;
@@ -122,7 +123,11 @@ pub fn run() {
             traktor_history::import_traktor_history,
             traktor_history::list_traktor_sets,
             traktor_history::traktor_set_report,
-            plays::set_report
+            plays::set_report,
+            ai_suggest::has_ai_api_key,
+            ai_suggest::set_ai_api_key,
+            ai_suggest::clear_ai_api_key,
+            ai_suggest::ai_suggestions
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

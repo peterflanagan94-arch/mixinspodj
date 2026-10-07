@@ -164,3 +164,12 @@ export type HistoryImportSummary = {
   unchanged: number;
   plays: number;
 };
+
+export type AiSuggestion = {
+  track_id: number;
+  title: string;
+  artist: string | null;
+  bpm: number | null;
+  camelot_key: string | null;
+  reason: string;
+};
