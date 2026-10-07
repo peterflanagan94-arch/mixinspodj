@@ -107,7 +107,7 @@ fn load_candidates(conn: &Connection, now_playing_id: i64) -> Result<Vec<Candida
     let mut stmt = conn
         .prepare(
             "SELECT id, title, artist, bpm, camelot_key, genre FROM tracks \
-             WHERE id != ?1 AND missing_file = 0 AND title IS NOT NULL \
+             WHERE id != ?1 AND missing_file = 0 AND title IS NOT NULL AND title != '' \
              AND bpm IS NOT NULL AND camelot_key IS NOT NULL \
              AND NOT ( \
                  artist IS NOT NULL \

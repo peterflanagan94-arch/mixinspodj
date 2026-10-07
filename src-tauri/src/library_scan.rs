@@ -152,6 +152,26 @@ pub(crate) fn backfill_genre_from_album(conn: &rusqlite::Connection) -> usize {
     updated
 }
 
+/// Fills in a title (and artist, where that's also missing) from the file
+/// name, for already-scanned tracks that have neither — the same fallback
+/// `extract_track` applies to new scans, run once over the existing library
+/// at startup. A track with no title shows as "Untitled" and isn't worth
+/// suggesting, since there's nothing to search for in Traktor.
+pub(crate) fn backfill_titles_from_filename(conn: &rusqlite::Connection) -> usize {
+    let Ok(candidates) = library::tracks_missing_title(conn) else {
+        return 0;
+    };
+    let mut updated = 0;
+    for (track_id, file_path) in candidates {
+        let (artist, title) = names_from_filename(Path::new(&file_path));
+        let Some(title) = title else { continue };
+        if library::set_inferred_title(conn, track_id, &title, artist.as_deref()).is_ok() {
+            updated += 1;
+        }
+    }
+    updated
+}
+
 pub(crate) fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error::Error>> {
     let file_hash = hash_file(path)?;
 

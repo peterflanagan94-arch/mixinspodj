@@ -146,6 +146,7 @@ fn load_candidate_features(conn: &Connection, exclude_id: i64) -> rusqlite::Resu
     let mut stmt = conn.prepare(
         "SELECT id, bpm, camelot_key, energy, genre, year FROM tracks \
          WHERE id != ?1 AND missing_file = 0 \
+         AND title IS NOT NULL AND title != '' \
          AND NOT ( \
              title IS NOT NULL AND artist IS NOT NULL \
              AND lower(trim(title)) = (SELECT lower(trim(title)) FROM tracks WHERE id = ?1) \
@@ -179,6 +180,24 @@ mod tests {
         )
         .unwrap();
         conn.last_insert_rowid()
+    }
+
+    #[test]
+    fn a_title_less_track_is_not_suggested() {
+        let conn = mixflow_db::connect_in_memory().unwrap();
+        let now_playing = insert(&conn, "/a.mp3", "Saturday Night", "Whigfield");
+        conn.execute(
+            "INSERT INTO tracks (file_path, title, artist, bpm, camelot_key) VALUES ('/b.mp3', NULL, NULL, 128.0, '8B')",
+            [],
+        )
+        .unwrap();
+        let untitled = conn.last_insert_rowid();
+        let titled = insert(&conn, "/c.mp3", "Real Track", "Real Artist");
+
+        let candidates = load_candidate_features(&conn, now_playing).unwrap();
+        let ids: Vec<i64> = candidates.iter().map(|t| t.id).collect();
+        assert!(!ids.contains(&untitled), "a track with no title has nothing to search for in Traktor");
+        assert!(ids.contains(&titled));
     }
 
     #[test]

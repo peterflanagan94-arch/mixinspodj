@@ -77,6 +77,11 @@ pub fn run() {
                 eprintln!("filled in genre from album title for {genre_updates} tracks");
             }
 
+            let title_updates = library_scan::backfill_titles_from_filename(&conn);
+            if title_updates > 0 {
+                eprintln!("filled in title from file name for {title_updates} tracks");
+            }
+
             mixflow_db::backup::write_backup(&conn, &backup_dir).expect("should write a startup backup");
             mixflow_db::backup::prune_backups(&backup_dir, BACKUPS_TO_KEEP).expect("should prune old backups");
 

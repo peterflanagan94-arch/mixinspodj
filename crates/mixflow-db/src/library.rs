@@ -207,6 +207,27 @@ pub fn set_inferred_genre(conn: &Connection, track_id: i64, genre: &str) -> Resu
     Ok(())
 }
 
+/// Tracks with no title — shown as "Untitled" and not worth suggesting,
+/// since there's nothing to search for in Traktor. Returns (id, file_path),
+/// for deriving a title from the file name.
+pub fn tracks_missing_title(conn: &Connection) -> Result<Vec<(i64, String)>, DbError> {
+    let mut stmt = conn.prepare("SELECT id, file_path FROM tracks WHERE title IS NULL OR title = ''")?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Sets a title inferred from the file name. Artist is filled in alongside
+/// only when the track doesn't already have one — never overwrites a real tag.
+pub fn set_inferred_title(conn: &Connection, track_id: i64, title: &str, artist: Option<&str>) -> Result<(), DbError> {
+    conn.execute(
+        "UPDATE tracks SET title = ?1, artist = COALESCE(NULLIF(artist, ''), ?2) WHERE id = ?3",
+        params![title, artist, track_id],
+    )?;
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub struct TrackForAnalysis {
     pub id: i64,
@@ -695,5 +716,83 @@ mod traktor_bpm_only_tests {
             .unwrap();
         assert_eq!(bpm, 128.0, "Traktor's BPM stays");
         assert_eq!(camelot, "8B", "analysis fills the missing key");
+    }
+}
+
+#[cfg(test)]
+mod title_backfill_tests {
+    use super::*;
+    use crate::connect_in_memory;
+
+    fn untitled(path: &str, hash: &str) -> NewTrack {
+        NewTrack {
+            file_path: path.into(),
+            file_hash: hash.into(),
+            title: None,
+            artist: None,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_title_less_track_is_found_and_filled_in() {
+        let conn = connect_in_memory().unwrap();
+        let id = match upsert_track(&conn, &untitled("/music/a.mp3", "h1")).unwrap() {
+            UpsertOutcome::Inserted { track_id } => track_id,
+            other => panic!("expected Inserted, got {other:?}"),
+        };
+        let already_titled = NewTrack {
+            file_path: "/music/b.mp3".into(),
+            file_hash: "h2".into(),
+            title: Some("September".into()),
+            artist: Some("Earth, Wind & Fire".into()),
+            ..Default::default()
+        };
+        let titled_id = match upsert_track(&conn, &already_titled).unwrap() {
+            UpsertOutcome::Inserted { track_id } => track_id,
+            other => panic!("expected Inserted, got {other:?}"),
+        };
+
+        let missing = tracks_missing_title(&conn).unwrap();
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].0, id);
+
+        set_inferred_title(&conn, id, "Diafonie", Some("Higher Place")).unwrap();
+        let (title, artist): (String, String) = conn
+            .query_row("SELECT title, artist FROM tracks WHERE id = ?1", params![id], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(title, "Diafonie");
+        assert_eq!(artist, "Higher Place");
+        assert!(tracks_missing_title(&conn).unwrap().is_empty());
+
+        // The already-titled track is untouched and never offered for backfill.
+        let (title2,): (String,) = conn
+            .query_row("SELECT title FROM tracks WHERE id = ?1", params![titled_id], |r| Ok((r.get(0)?,)))
+            .unwrap();
+        assert_eq!(title2, "September");
+    }
+
+    #[test]
+    fn set_inferred_title_never_overwrites_a_real_artist() {
+        let conn = connect_in_memory().unwrap();
+        let track = NewTrack {
+            file_path: "/music/c.mp3".into(),
+            file_hash: "h3".into(),
+            title: None,
+            artist: Some("Real Artist".into()),
+            ..Default::default()
+        };
+        let id = match upsert_track(&conn, &track).unwrap() {
+            UpsertOutcome::Inserted { track_id } => track_id,
+            other => panic!("expected Inserted, got {other:?}"),
+        };
+
+        set_inferred_title(&conn, id, "Some Title", Some("Guessed Artist")).unwrap();
+        let (artist,): (String,) = conn
+            .query_row("SELECT artist FROM tracks WHERE id = ?1", params![id], |r| Ok((r.get(0)?,)))
+            .unwrap();
+        assert_eq!(artist, "Real Artist");
     }
 }
