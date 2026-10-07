@@ -71,6 +71,11 @@ pub fn run() {
                 }
             }
 
+            let genre_updates = library_scan::backfill_genre_from_album(&conn);
+            if genre_updates > 0 {
+                eprintln!("filled in genre from album title for {genre_updates} tracks");
+            }
+
             mixflow_db::backup::write_backup(&conn, &backup_dir).expect("should write a startup backup");
             mixflow_db::backup::prune_backups(&backup_dir, BACKUPS_TO_KEEP).expect("should prune old backups");
 

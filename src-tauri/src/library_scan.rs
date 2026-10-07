@@ -134,6 +134,24 @@ pub(crate) fn is_audio_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Fills in genre for already-scanned tracks whose album title names a
+/// genre but whose own genre tag is empty — the same inference `extract_track`
+/// applies to new scans, run once over the existing library at startup.
+pub(crate) fn backfill_genre_from_album(conn: &rusqlite::Connection) -> usize {
+    let Ok(candidates) = library::tracks_missing_genre(conn) else {
+        return 0;
+    };
+    let mut updated = 0;
+    for (track_id, album) in candidates {
+        if let Some(genre) = infer_genre_from_album(&album) {
+            if library::set_inferred_genre(conn, track_id, &genre).is_ok() {
+                updated += 1;
+            }
+        }
+    }
+    updated
+}
+
 pub(crate) fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error::Error>> {
     let file_hash = hash_file(path)?;
 
@@ -153,7 +171,13 @@ pub(crate) fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error:
     let title = tagged_title.or(name_title);
     let artist = tagged_artist.or(name_artist);
     let album = tag.and_then(|t| t.get_string(&ItemKey::AlbumTitle)).map(str::to_owned);
-    let genre = tag.and_then(|t| t.get_string(&ItemKey::Genre)).map(str::to_owned);
+    // Compilation albums often name their genre ("NOW That's What I Call
+    // Country") even when the file's own genre tag is empty, which is
+    // common for tracks ripped or downloaded without full tagging.
+    let genre = tag
+        .and_then(|t| t.get_string(&ItemKey::Genre))
+        .map(str::to_owned)
+        .or_else(|| album.as_deref().and_then(infer_genre_from_album));
     let year = tag
         .and_then(|t| t.get_string(&ItemKey::Year).or_else(|| t.get_string(&ItemKey::RecordingDate)))
         .and_then(|s| s.get(0..4))
@@ -176,6 +200,90 @@ pub(crate) fn extract_track(path: &Path) -> Result<NewTrack, Box<dyn std::error:
 
 /// Reads "Artist - Title" (or just "Title") from a file name, dropping a
 /// leading track number such as "01 " or "07. ". Returns (artist, title).
+/// Common genre names, longest first so a multi-word genre matches before a
+/// shorter word inside it. Recognising a genre's own name in an album title
+/// ("NOW That's What I Call Country") is a much smaller claim than guessing
+/// which genres are compatible with which — it only fires when the word is
+/// actually there.
+const GENRE_NAMES: &[&str] = &[
+    "drum and bass",
+    "easy listening",
+    "spoken word",
+    "deep house",
+    "tech house",
+    "tropical house",
+    "future house",
+    "progressive house",
+    "children's",
+    "hip-hop",
+    "hip hop",
+    "r&b",
+    "k-pop",
+    "afrobeats",
+    "afrobeat",
+    "amapiano",
+    "dancehall",
+    "reggaeton",
+    "drill",
+    "grime",
+    "garage",
+    "trance",
+    "techno",
+    "house",
+    "disco",
+    "funk",
+    "soul",
+    "reggae",
+    "country",
+    "classical",
+    "jazz",
+    "blues",
+    "metal",
+    "punk",
+    "indie",
+    "gospel",
+    "latin",
+    "soundtrack",
+    "ambient",
+    "opera",
+    "musical",
+    "comedy",
+    "folk",
+    "pop",
+    "rock",
+    "dance",
+    "electronic",
+];
+
+/// Finds a known genre's name as a whole word in `album`, case-insensitively.
+pub(crate) fn infer_genre_from_album(album: &str) -> Option<String> {
+    let lower = album.to_lowercase();
+    GENRE_NAMES
+        .iter()
+        .find(|name| contains_word(&lower, name))
+        .map(|name| title_case(name))
+}
+
+fn contains_word(haystack: &str, needle: &str) -> bool {
+    let is_boundary = |c: Option<char>| !c.is_some_and(|c| c.is_alphanumeric());
+    haystack.match_indices(needle).any(|(i, _)| {
+        is_boundary(haystack[..i].chars().next_back()) && is_boundary(haystack[i + needle.len()..].chars().next())
+    })
+}
+
+fn title_case(name: &str) -> String {
+    name.split(' ')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub(crate) fn names_from_filename(path: &Path) -> (Option<String>, Option<String>) {
     let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
         return (None, None);
@@ -222,8 +330,33 @@ fn hash_file(path: &Path) -> std::io::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::names_from_filename;
+    use super::{infer_genre_from_album, names_from_filename};
     use std::path::Path;
+
+    #[test]
+    fn genre_is_recognised_in_a_compilation_album_title() {
+        assert_eq!(
+            infer_genre_from_album("NOW That's What I Call Country #1s").as_deref(),
+            Some("Country")
+        );
+        assert_eq!(infer_genre_from_album("Pop Party 2013").as_deref(), Some("Pop"));
+    }
+
+    #[test]
+    fn multi_word_genres_match_before_a_shorter_word_inside_them() {
+        assert_eq!(infer_genre_from_album("Deep House Sessions").as_deref(), Some("Deep House"));
+    }
+
+    #[test]
+    fn a_genre_word_inside_another_word_does_not_match() {
+        // "pop" inside "Popular", not the genre.
+        assert_eq!(infer_genre_from_album("Popular Hits 2020"), None);
+    }
+
+    #[test]
+    fn an_album_with_no_recognised_genre_word_gives_nothing() {
+        assert_eq!(infer_genre_from_album("Maschine Expansion"), None);
+    }
 
     #[test]
     fn artist_and_title_come_from_dash_separated_name() {

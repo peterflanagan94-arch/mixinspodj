@@ -190,6 +190,23 @@ pub fn update_metadata(conn: &Connection, edit: &MetadataEdit) -> Result<(), DbE
     Ok(())
 }
 
+/// Tracks with an album but no genre, for inferring one from the album title.
+pub fn tracks_missing_genre(conn: &Connection) -> Result<Vec<(i64, String)>, DbError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, album FROM tracks WHERE (genre IS NULL OR genre = '') \
+         AND album IS NOT NULL AND album != ''",
+    )?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn set_inferred_genre(conn: &Connection, track_id: i64, genre: &str) -> Result<(), DbError> {
+    conn.execute("UPDATE tracks SET genre = ?1 WHERE id = ?2", params![genre, track_id])?;
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub struct TrackForAnalysis {
     pub id: i64,
