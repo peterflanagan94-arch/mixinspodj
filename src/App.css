@@ -453,6 +453,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   padding: 7px 10px;
   border-top: 1px solid var(--border);
   background-color: var(--bg-raised);
@@ -496,6 +497,12 @@ button {
 
 .traktor-dot-starting {
   background: var(--text-tertiary);
+}
+
+/* Deliberately the same flat, unlit dot regardless of anything — there's
+   no live VirtualDJ connection to reflect, so this never implies one. */
+.traktor-dot-unavailable {
+  background: var(--border);
 }
 
 /* ===== Panels (Search / Settings) ===== */

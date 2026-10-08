@@ -9,7 +9,12 @@ const BROADCASTING_HINT =
   "Address 127.0.0.1, Port 8765, Mount path /mixinspo, Password mixinspo. " +
   "Then turn Broadcasting on (the antenna icon).";
 
-function statusInfo(status: TraktorStatus | null): { className: string; hint: string } {
+const VIRTUALDJ_HINT =
+  "No live detection yet. VirtualDJ's Network Control Plugin needs a Pro license to build " +
+  "and test against, which isn't available right now. Settings → VirtualDJ (experimental) " +
+  "imports BPM and key from your VirtualDJ database file instead.";
+
+function traktorStatusInfo(status: TraktorStatus | null): { className: string; hint: string } {
   if (!status) return { className: "traktor-dot-starting", hint: "Starting…" };
   switch (status.state) {
     case "connected":
@@ -26,16 +31,24 @@ function statusInfo(status: TraktorStatus | null): { className: string; hint: st
 }
 
 /**
- * Bottom bar: just the Traktor connection status. Hovering it reminds the
- * DJ to turn Broadcasting on when it's not yet connected.
+ * Bottom bar: DJ software connection status. Traktor's is live — it
+ * reflects the real Broadcasting connection, and hovering it reminds the DJ
+ * to turn Broadcasting on when it's not yet connected. VirtualDJ's dot is
+ * deliberately always the same dim, unlit state: there's no live detection
+ * for it (see Settings), so it would be dishonest to animate this one as if
+ * it were trying to connect to something.
  */
 export function StatusBar({ traktorStatus }: Props) {
-  const status = statusInfo(traktorStatus);
+  const traktor = traktorStatusInfo(traktorStatus);
   return (
     <div className="filter-row">
-      <div className="traktor-status" title={status.hint}>
-        <span className={`traktor-dot ${status.className}`} />
+      <div className="traktor-status" title={traktor.hint}>
+        <span className={`traktor-dot ${traktor.className}`} />
         TRAKTOR
+      </div>
+      <div className="traktor-status" title={VIRTUALDJ_HINT}>
+        <span className="traktor-dot traktor-dot-unavailable" />
+        VIRTUALDJ
       </div>
     </div>
   );
