@@ -192,7 +192,7 @@ fn import_collection(app: &AppHandle, nml: &Path) -> Result<ImportSummary, Strin
         // One track failing to update shouldn't stop the rest of the collection.
         let Ok(conn) = db.0.lock() else { continue };
         let key_ref = key.as_ref().map(|(name, camelot)| (name.as_str(), camelot.as_str()));
-        if library::apply_traktor_tempo(&conn, track_id, bpm, key_ref).is_ok() {
+        if library::apply_external_tempo(&conn, track_id, "traktor", bpm, key_ref).is_ok() {
             summary.tempo_applied += 1;
         }
     }

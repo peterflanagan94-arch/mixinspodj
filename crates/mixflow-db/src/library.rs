@@ -256,21 +256,24 @@ pub fn tracks_needing_analysis(conn: &Connection) -> Result<Vec<TrackForAnalysis
 /// any estimate and are marked so later analysis leaves them alone.
 /// `key` is (key name, Camelot code) when Traktor has one; a track with only a
 /// BPM keeps analysis's key until analysis fills it in.
-pub fn apply_traktor_tempo(
+/// Sets BPM and key imported from DJ software (`source`, e.g. "traktor" or
+/// "virtualdj"). These replace any estimate and are marked so later analysis
+/// leaves them alone — see `save_analysis`.
+pub fn apply_external_tempo(
     conn: &Connection,
     track_id: i64,
+    source: &str,
     bpm: f32,
     key: Option<(&str, &str)>,
 ) -> Result<(), DbError> {
     match key {
         Some((key_name, camelot_key)) => conn.execute(
-            "UPDATE tracks SET bpm = ?1, key = ?2, camelot_key = ?3, tempo_source = 'traktor' \
-             WHERE id = ?4",
-            params![bpm, key_name, camelot_key, track_id],
+            "UPDATE tracks SET bpm = ?1, key = ?2, camelot_key = ?3, tempo_source = ?4 WHERE id = ?5",
+            params![bpm, key_name, camelot_key, source, track_id],
         )?,
         None => conn.execute(
-            "UPDATE tracks SET bpm = ?1, tempo_source = 'traktor' WHERE id = ?2",
-            params![bpm, track_id],
+            "UPDATE tracks SET bpm = ?1, tempo_source = ?2 WHERE id = ?3",
+            params![bpm, source, track_id],
         )?,
     };
     Ok(())
@@ -318,15 +321,16 @@ pub struct AnalysisUpdate {
 /// Deliberately takes plain primitives rather than a `mixflow-analysis`
 /// type — this crate has no DSP dependency, and shouldn't need one.
 pub fn save_analysis(conn: &Connection, update: &AnalysisUpdate) -> Result<(), DbError> {
-    // Tempo and key already imported from Traktor stay put: the DJ's own
-    // analysis is only an estimate, and Traktor's values are the ones the
-    // DJ actually mixes by.
+    // Tempo and key already imported from DJ software (Traktor, VirtualDJ,
+    // ...) stay put: the DJ's own analysis is only an estimate, and the
+    // values the DJ actually mixes by come from their software's own
+    // analysis.
     conn.execute(
         "UPDATE tracks SET \
-            bpm = CASE WHEN tempo_source = 'traktor' THEN bpm ELSE ?1 END, \
+            bpm = CASE WHEN tempo_source IS NOT NULL THEN bpm ELSE ?1 END, \
             bpm_confidence = ?2, \
-            key = CASE WHEN tempo_source = 'traktor' AND key IS NOT NULL THEN key ELSE ?3 END, \
-            camelot_key = CASE WHEN tempo_source = 'traktor' AND camelot_key IS NOT NULL \
+            key = CASE WHEN tempo_source IS NOT NULL AND key IS NOT NULL THEN key ELSE ?3 END, \
+            camelot_key = CASE WHEN tempo_source IS NOT NULL AND camelot_key IS NOT NULL \
                 THEN camelot_key ELSE ?4 END, \
             energy = ?5, danceability = ?6, analyzed_at = datetime('now') \
          WHERE id = ?7",
@@ -622,7 +626,7 @@ mod tempo_tests {
     fn traktor_tempo_survives_later_analysis() {
         let conn = connect_in_memory().unwrap();
         let id = insert(&conn, "/music/a.mp3", "h1");
-        apply_traktor_tempo(&conn, id, 136.0, Some(("Ebm", "2A"))).unwrap();
+        apply_external_tempo(&conn, id, "traktor", 136.0, Some(("Ebm", "2A"))).unwrap();
 
         save_analysis(&conn, &analysis(id)).unwrap();
 
@@ -689,7 +693,7 @@ mod traktor_bpm_only_tests {
             UpsertOutcome::Inserted { track_id } => track_id,
             other => panic!("expected Inserted, got {other:?}"),
         };
-        apply_traktor_tempo(&conn, id, 128.0, None).unwrap();
+        apply_external_tempo(&conn, id, "traktor", 128.0, None).unwrap();
         save_analysis(
             &conn,
             &AnalysisUpdate {

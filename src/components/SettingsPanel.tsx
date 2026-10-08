@@ -59,6 +59,41 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
     }
   }
   const [traktorImport, setTraktorImport] = useState<ImportSummary | null>(null);
+  const [virtualdjDatabase, setVirtualdjDatabase] = useState<string | null>(null);
+  const [virtualdjImport, setVirtualdjImport] = useState<ImportSummary | null>(null);
+  const [importingVdj, setImportingVdj] = useState(false);
+
+  async function loadVirtualdjDatabase() {
+    try {
+      setVirtualdjDatabase(await invoke<string | null>("find_virtualdj_database"));
+    } catch (e) {
+      setScanError(String(e));
+    }
+  }
+
+  async function chooseVirtualdjDatabase() {
+    setScanError(null);
+    try {
+      const picked = await invoke<string | null>("choose_virtualdj_database");
+      if (picked) setVirtualdjDatabase(picked);
+    } catch (e) {
+      setScanError(String(e));
+    }
+  }
+
+  async function importVirtualdjDatabase() {
+    if (!virtualdjDatabase) return;
+    setImportingVdj(true);
+    setScanError(null);
+    try {
+      setVirtualdjImport(await invoke<ImportSummary>("import_virtualdj_database", { path: virtualdjDatabase }));
+      onLibraryChanged();
+    } catch (e) {
+      setScanError(String(e));
+    } finally {
+      setImportingVdj(false);
+    }
+  }
 
   async function loadTraktorCollection() {
     try {
@@ -99,6 +134,7 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
     if (open) {
       void loadWatchedFolders();
       void loadTraktorCollection();
+      void loadVirtualdjDatabase();
       invoke<boolean>("has_ai_api_key").then(setAiKeySet).catch(() => setAiKeySet(false));
       invoke<boolean>("has_share_plays_enabled").then(setSharePlays).catch(() => setSharePlays(true));
     }
@@ -325,6 +361,39 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
                 ? "waiting for Traktor"
                 : "starting…"}
           </p>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">VirtualDJ (experimental)</div>
+          <p className="hint">
+            BPM and key import from VirtualDJ's own database file — built from community
+            documentation, not tested against a real VirtualDJ install. There's no live
+            now-playing detection for VirtualDJ yet, only this import, and it only runs when you
+            press Import below, never automatically.
+          </p>
+          <p className="hint">
+            Database:{" "}
+            <strong>{virtualdjDatabase ?? "none found"}</strong>
+          </p>
+          <button type="button" onClick={() => void chooseVirtualdjDatabase()}>
+            Choose VirtualDJ database…
+          </button>
+          {virtualdjDatabase && (
+            <button type="button" disabled={importingVdj} onClick={() => void importVirtualdjDatabase()}>
+              {importingVdj ? "Importing…" : "Import"}
+            </button>
+          )}
+          {virtualdjImport && (
+            <p className="hint">
+              Found {virtualdjImport.entries} tracks in the database. Applied BPM/key to{" "}
+              {virtualdjImport.tempo_applied}
+              {virtualdjImport.indexed > 0 ? `, added ${virtualdjImport.indexed} new files` : ""}.{" "}
+              {virtualdjImport.missing_files > 0 &&
+                `${virtualdjImport.missing_files} entries pointed at files not on this Mac.`}{" "}
+              If this looks wrong — wrong BPMs, or far fewer matches than you expected — tell
+              Peter; it means the unverified parts of this parser need fixing against your file.
+            </p>
+          )}
         </div>
 
         <div className="settings-section">

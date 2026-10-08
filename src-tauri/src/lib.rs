@@ -13,6 +13,7 @@ mod settings;
 mod tracks;
 mod traktor;
 mod traktor_history;
+mod virtualdj;
 mod watch;
 
 pub(crate) struct DbState(pub(crate) Mutex<rusqlite::Connection>);
@@ -116,6 +117,9 @@ pub fn run() {
             analysis::analyze_library,
             analysis::analyze_track,
             traktor::import_traktor_collection,
+            virtualdj::find_virtualdj_database,
+            virtualdj::choose_virtualdj_database,
+            virtualdj::import_virtualdj_database,
             traktor::active_traktor_collection,
             traktor::choose_traktor_collection,
             watch::list_watched_folders,
