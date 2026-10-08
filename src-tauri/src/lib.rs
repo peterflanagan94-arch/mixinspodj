@@ -6,6 +6,7 @@ mod analysis;
 mod export;
 mod broadcast;
 mod library_scan;
+mod play_sharing;
 mod plays;
 mod recommend;
 mod settings;
@@ -133,7 +134,9 @@ pub fn run() {
             ai_suggest::ai_suggestions_available,
             ai_suggest::set_ai_api_key,
             ai_suggest::clear_ai_api_key,
-            ai_suggest::ai_suggestions
+            ai_suggest::ai_suggestions,
+            play_sharing::has_share_plays_enabled,
+            play_sharing::set_share_plays
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

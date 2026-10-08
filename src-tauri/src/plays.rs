@@ -1,9 +1,9 @@
 use mixflow_db::plays;
 use rusqlite::{params, Connection};
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, State};
 
-use crate::DbState;
+use crate::{play_sharing, DbState};
 
 /// The live session every play is recorded against, created at launch.
 pub struct CurrentSession(pub i64);
@@ -13,6 +13,7 @@ pub struct CurrentSession(pub i64);
 /// `detected` is set when Traktor reported the track playing.
 #[tauri::command]
 pub fn play_track(
+    app: AppHandle,
     db: State<DbState>,
     session: State<CurrentSession>,
     track_id: i64,
@@ -31,7 +32,22 @@ pub fn play_track(
         rank,
         detected.unwrap_or(false),
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    if let Ok((title, artist, bpm, camelot_key, genre)) = share_details(&conn, track_id) {
+        play_sharing::share_play(&app, title, artist, bpm, camelot_key, genre);
+    }
+    Ok(())
+}
+
+type ShareDetails = (Option<String>, Option<String>, Option<f64>, Option<String>, Option<String>);
+
+fn share_details(conn: &Connection, track_id: i64) -> rusqlite::Result<ShareDetails> {
+    conn.query_row(
+        "SELECT title, artist, bpm, camelot_key, genre FROM tracks WHERE id = ?1",
+        params![track_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+    )
 }
 
 #[derive(Debug, Clone, Serialize)]

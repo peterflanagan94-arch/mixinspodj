@@ -29,6 +29,16 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
   const [aiKeySet, setAiKeySet] = useState<boolean | null>(null);
   const [aiKeyInput, setAiKeyInput] = useState("");
   const [savingAiKey, setSavingAiKey] = useState(false);
+  const [sharePlays, setSharePlays] = useState<boolean | null>(null);
+
+  async function toggleSharePlays(enabled: boolean) {
+    setSharePlays(enabled);
+    try {
+      await invoke("set_share_plays", { enabled });
+    } catch (e) {
+      setScanError(String(e));
+    }
+  }
 
   async function removeAiKey() {
     await invoke("clear_ai_api_key");
@@ -90,6 +100,7 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
       void loadWatchedFolders();
       void loadTraktorCollection();
       invoke<boolean>("has_ai_api_key").then(setAiKeySet).catch(() => setAiKeySet(false));
+      invoke<boolean>("has_share_plays_enabled").then(setSharePlays).catch(() => setSharePlays(true));
     }
   }, [open]);
 
@@ -343,6 +354,24 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
               </button>
             </>
           )}
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Play Sharing</div>
+          <p className="hint">
+            Sends the track, artist, BPM, key and genre of what you play to MixInspo's shared,
+            anonymous play log — never your name, account or anything that identifies you. Used
+            to build a real "popular with MixInspo DJs" list from actual usage. On by default.
+          </p>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={sharePlays === true}
+              disabled={sharePlays === null}
+              onChange={(e) => void toggleSharePlays(e.target.checked)}
+            />
+            Share my plays
+          </label>
         </div>
 
         <div className="settings-section">

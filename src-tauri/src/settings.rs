@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     /// The Traktor collection file to import from. When unset, the newest
     /// `collection.nml` under the usual Traktor folders is used.
@@ -18,6 +18,26 @@ pub struct AppSettings {
     /// anywhere but straight to Anthropic's API.
     #[serde(default)]
     pub anthropic_api_key: Option<String>,
+    /// Sends this DJ's plays — track, artist, BPM, key, genre; nothing that
+    /// identifies them — to MixInspo's shared, anonymous play log, used to
+    /// build a real "popular with MixInspo DJs" list from actual usage. On
+    /// by default; a Settings toggle turns it off at any time.
+    #[serde(default = "default_true")]
+    pub share_plays: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            traktor_collection: None,
+            anthropic_api_key: None,
+            share_plays: true,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn settings_path(app: &AppHandle) -> Option<PathBuf> {

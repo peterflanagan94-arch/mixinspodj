@@ -7,3 +7,10 @@ compatibility_date = "2026-01-01"
 [[kv_namespaces]]
 binding = "AI_PROXY_KV"
 id = "33bfa218649a426088c6f13c618c384e"
+
+# Created once with: npx wrangler d1 create mixinspo-plays
+# Then paste the database_id it prints in place of REPLACE_WITH_D1_ID below.
+[[d1_databases]]
+binding = "PLAYS_DB"
+database_name = "mixinspo-plays"
+database_id = "REPLACE_WITH_D1_ID"
