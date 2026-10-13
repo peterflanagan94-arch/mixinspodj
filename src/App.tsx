@@ -12,6 +12,7 @@ import { SuggestionRow } from "./components/SuggestionRow";
 import { SearchPanel } from "./components/SearchPanel";
 import { TopPlayedPanel } from "./components/TopPlayedPanel";
 import { SetsPanel } from "./components/SetsPanel";
+import { SetBuilderPanel } from "./components/SetBuilderPanel";
 import { AiSuggestResults } from "./components/AiSuggestResults";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { EventContext, ScoredTrack, TraktorStatus, TraktorTrack, TrackSummary } from "./types";
@@ -28,6 +29,7 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [topPlayedOpen, setTopPlayedOpen] = useState(false);
   const [setsOpen, setSetsOpen] = useState(false);
+  const [setBuilderOpen, setSetBuilderOpen] = useState(false);
   const [suggestionSource, setSuggestionSource] = useState<"style" | "ai">("style");
   const [compact, setCompact] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -49,6 +51,11 @@ function App() {
       .then(setDbStatus)
       .catch((e) => setDbStatus(`error: ${e}`));
     refreshTracks();
+    invoke<string>("get_startup_view")
+      .then((view) => {
+        if (view === "set_prepare") setSetBuilderOpen(true);
+      })
+      .catch((e) => console.error("get_startup_view failed", e));
   }, []);
 
   async function toggleAlwaysOnTop() {
@@ -203,6 +210,7 @@ function App() {
         onOpenSearch={() => setSearchOpen(true)}
         onOpenTopPlayed={() => setTopPlayedOpen(true)}
         onOpenSets={() => setSetsOpen(true)}
+        onOpenSetBuilder={() => setSetBuilderOpen(true)}
         compact={compact}
         onToggleCompact={toggleCompact}
         onOpenLibrary={openLibrary}
@@ -284,6 +292,7 @@ function App() {
       <StatusBar traktorStatus={traktorStatus} />
 
       <SetsPanel open={setsOpen} onClose={() => setSetsOpen(false)} />
+      <SetBuilderPanel open={setBuilderOpen} onClose={() => setSetBuilderOpen(false)} eventContext={eventContext} />
       <TopPlayedPanel
         open={topPlayedOpen}
         onClose={() => setTopPlayedOpen(false)}

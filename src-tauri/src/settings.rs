@@ -24,6 +24,20 @@ pub struct AppSettings {
     /// by default; a Settings toggle turns it off at any time.
     #[serde(default = "default_true")]
     pub share_plays: bool,
+    /// What the app opens to: "live" (Now Playing, the normal gig view) or
+    /// "set_prepare" (straight to the Set Builder). Everything else still
+    /// runs either way — the Traktor listener, Now Playing — this only
+    /// decides which screen greets the DJ.
+    #[serde(default = "default_startup_view")]
+    pub startup_view: String,
+    /// The DJ's own Spotify API credentials (Settings → Spotify), for
+    /// reading a public playlist's track list to match against their
+    /// library. A free Spotify Developer app — Client Credentials flow,
+    /// no personal Spotify login. Kept only in this local file.
+    #[serde(default)]
+    pub spotify_client_id: Option<String>,
+    #[serde(default)]
+    pub spotify_client_secret: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -32,12 +46,19 @@ impl Default for AppSettings {
             traktor_collection: None,
             anthropic_api_key: None,
             share_plays: true,
+            startup_view: default_startup_view(),
+            spotify_client_id: None,
+            spotify_client_secret: None,
         }
     }
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_startup_view() -> String {
+    "live".to_string()
 }
 
 fn settings_path(app: &AppHandle) -> Option<PathBuf> {
@@ -58,4 +79,16 @@ pub fn save(app: &AppHandle, settings: &AppSettings) -> Result<(), String> {
     }
     let text = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     std::fs::write(path, text).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_startup_view(app: AppHandle) -> String {
+    load(&app).startup_view
+}
+
+#[tauri::command]
+pub fn set_startup_view(app: AppHandle, view: String) -> Result<(), String> {
+    let mut settings = load(&app);
+    settings.startup_view = view;
+    save(&app, &settings)
 }

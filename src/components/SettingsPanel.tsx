@@ -7,6 +7,9 @@ import {
   ImportSummary,
   ScanProgress,
   ScanSummary,
+  STARTUP_VIEW_LABELS,
+  STARTUP_VIEWS,
+  StartupView,
   TraktorStatus,
 } from "../types";
 
@@ -30,6 +33,11 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
   const [aiKeyInput, setAiKeyInput] = useState("");
   const [savingAiKey, setSavingAiKey] = useState(false);
   const [sharePlays, setSharePlays] = useState<boolean | null>(null);
+  const [startupView, setStartupView] = useState<StartupView | null>(null);
+  const [spotifyCredsSet, setSpotifyCredsSet] = useState<boolean | null>(null);
+  const [spotifyClientId, setSpotifyClientId] = useState("");
+  const [spotifyClientSecret, setSpotifyClientSecret] = useState("");
+  const [savingSpotify, setSavingSpotify] = useState(false);
 
   async function toggleSharePlays(enabled: boolean) {
     setSharePlays(enabled);
@@ -40,9 +48,41 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
     }
   }
 
+  async function changeStartupView(view: StartupView) {
+    setStartupView(view);
+    try {
+      await invoke("set_startup_view", { view });
+    } catch (e) {
+      setScanError(String(e));
+    }
+  }
+
   async function removeAiKey() {
     await invoke("clear_ai_api_key");
     setAiKeySet(false);
+  }
+
+  async function removeSpotifyCredentials() {
+    await invoke("clear_spotify_credentials");
+    setSpotifyCredsSet(false);
+  }
+
+  async function saveSpotifyCredentials() {
+    if (!spotifyClientId.trim() || !spotifyClientSecret.trim()) return;
+    setSavingSpotify(true);
+    try {
+      await invoke("set_spotify_credentials", {
+        clientId: spotifyClientId.trim(),
+        clientSecret: spotifyClientSecret.trim(),
+      });
+      setSpotifyClientId("");
+      setSpotifyClientSecret("");
+      setSpotifyCredsSet(true);
+    } catch (e) {
+      setScanError(String(e));
+    } finally {
+      setSavingSpotify(false);
+    }
   }
 
   async function saveAiKey() {
@@ -137,6 +177,8 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
       void loadVirtualdjDatabase();
       invoke<boolean>("has_ai_api_key").then(setAiKeySet).catch(() => setAiKeySet(false));
       invoke<boolean>("has_share_plays_enabled").then(setSharePlays).catch(() => setSharePlays(true));
+      invoke<StartupView>("get_startup_view").then(setStartupView).catch(() => setStartupView("live"));
+      invoke<boolean>("has_spotify_credentials").then(setSpotifyCredsSet).catch(() => setSpotifyCredsSet(false));
     }
   }, [open]);
 
@@ -205,6 +247,7 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
           </button>
         </div>
 
+        <div className="settings-body">
         <div className="settings-section">
           <div className="settings-section-label">Library</div>
           <p className="hint">Select a folder of music files to scan into your library.</p>
@@ -426,6 +469,44 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
         </div>
 
         <div className="settings-section">
+          <div className="settings-section-label">Spotify</div>
+          <p className="hint">
+            {spotifyCredsSet === true
+              ? "Connected — Set Builder can match a Spotify playlist link against your library. Only the playlist's track list is read, nothing is played or downloaded, and no personal Spotify login is involved."
+              : "Lets Set Builder read a public Spotify playlist's track list and match it against your library. Needs your own free Spotify Developer app (Client Credentials, no personal login) — create one at developer.spotify.com/dashboard, then paste its Client ID and Secret here."}
+          </p>
+          {spotifyCredsSet === true ? (
+            <button type="button" onClick={() => void removeSpotifyCredentials()}>
+              Remove credentials
+            </button>
+          ) : (
+            <>
+              <input
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                className="panel-search-input"
+                placeholder="Client ID"
+                value={spotifyClientId}
+                onChange={(e) => setSpotifyClientId(e.target.value)}
+              />
+              <input
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                className="panel-search-input"
+                placeholder="Client Secret"
+                value={spotifyClientSecret}
+                onChange={(e) => setSpotifyClientSecret(e.target.value)}
+              />
+              <button type="button" disabled={savingSpotify} onClick={() => void saveSpotifyCredentials()}>
+                {savingSpotify ? "Saving…" : "Save credentials"}
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="settings-section">
           <div className="settings-section-label">Play Sharing</div>
           <p className="hint">
             Sends the track, artist, BPM, key and genre of what you play to MixInspo's shared,
@@ -444,11 +525,32 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
         </div>
 
         <div className="settings-section">
+          <div className="settings-section-label">On startup</div>
+          <p className="hint">
+            The Traktor listener and Now Playing always run in the background either way — this
+            only picks which screen greets you when the app opens.
+          </p>
+          <select
+            className="panel-search-input"
+            value={startupView ?? "live"}
+            disabled={startupView === null}
+            onChange={(e) => void changeStartupView(e.target.value as StartupView)}
+          >
+            {STARTUP_VIEWS.map((v) => (
+              <option key={v} value={v}>
+                {STARTUP_VIEW_LABELS[v]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="settings-section">
           <div className="settings-section-label">Window & macOS behaviour</div>
           <p className="hint">
             Mini mode, menu-bar show/hide, launch at login, and remembering window position/size are
             not built yet — a dedicated milestone, not faked here.
           </p>
+        </div>
         </div>
       </div>
     </div>

@@ -9,7 +9,9 @@ mod library_scan;
 mod play_sharing;
 mod plays;
 mod recommend;
+mod set_builder;
 mod settings;
+mod spotify;
 mod tracks;
 mod traktor;
 mod traktor_history;
@@ -140,7 +142,14 @@ pub fn run() {
             ai_suggest::clear_ai_api_key,
             ai_suggest::ai_suggestions,
             play_sharing::has_share_plays_enabled,
-            play_sharing::set_share_plays
+            play_sharing::set_share_plays,
+            set_builder::build_set,
+            settings::get_startup_view,
+            settings::set_startup_view,
+            spotify::has_spotify_credentials,
+            spotify::set_spotify_credentials,
+            spotify::clear_spotify_credentials,
+            spotify::import_spotify_playlist
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
