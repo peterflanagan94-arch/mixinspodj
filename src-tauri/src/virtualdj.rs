@@ -40,10 +40,12 @@ pub struct VdjImportSummary {
     pub missing_files: usize,
 }
 
-/// VirtualDJ's documented location is `Documents/VirtualDJ/VirtualDJ
-/// Database *.xml`. Also checks the common macOS `Application Support`
-/// convention, since the Mac location specifically isn't confirmed anywhere
-/// found. Picks the most recently modified match.
+/// Confirmed against a real install: on this Mac it's plainly
+/// `~/Library/Application Support/VirtualDJ/database.xml` — not
+/// `Documents/VirtualDJ/VirtualDJ Database *.xml` as the (Windows-centric)
+/// wiki describes. Both locations and both filename shapes are checked
+/// anyway, since VirtualDJ's own docs show the Windows name and installs
+/// vary. Picks the most recently modified match.
 pub fn find_database() -> Option<PathBuf> {
     let home = PathBuf::from(std::env::var_os("HOME")?);
     [home.join("Documents/VirtualDJ"), home.join("Library/Application Support/VirtualDJ")]
@@ -53,11 +55,7 @@ pub fn find_database() -> Option<PathBuf> {
                 .max_depth(2)
                 .into_iter()
                 .filter_map(Result::ok)
-                .filter(|e| {
-                    e.file_type().is_file()
-                        && e.path().extension().is_some_and(|x| x == "xml")
-                        && e.file_name().to_string_lossy().starts_with("VirtualDJ Database")
-                })
+                .filter(|e| e.file_type().is_file() && is_database_filename(&e.file_name().to_string_lossy()))
                 .filter_map(|e| {
                     let modified = e.metadata().ok()?.modified().ok()?;
                     Some((modified, e.into_path()))
@@ -66,6 +64,14 @@ pub fn find_database() -> Option<PathBuf> {
         })
         .max_by_key(|(modified, _)| *modified)
         .map(|(_, path)| path)
+}
+
+fn is_database_filename(name: &str) -> bool {
+    if !name.to_ascii_lowercase().ends_with(".xml") {
+        return false;
+    }
+    let stem = &name[..name.len() - 4];
+    stem.eq_ignore_ascii_case("database") || stem.to_ascii_lowercase().starts_with("virtualdj database")
 }
 
 #[tauri::command]
@@ -94,6 +100,12 @@ pub fn import_virtualdj_database(app: AppHandle, path: String) -> Result<VdjImpo
             summary.missing_files += 1;
             continue;
         }
+        // VirtualDJ records paths through macOS's /Volumes/<boot volume name>
+        // alias for the startup disk, which is a different string from the
+        // plain /Users/... path the library scan stores for the same file.
+        // Canonicalizing resolves that alias (and any other symlink) so this
+        // matches the already-indexed track instead of inserting a duplicate.
+        let path = std::fs::canonicalize(&path).map(|p| p.to_string_lossy().into_owned()).unwrap_or(path);
 
         let track_id = {
             let db = app.state::<DbState>();
@@ -211,6 +223,16 @@ mod tests {
         let entries = parse_database(SAMPLE);
         assert_eq!(entries[1].bpm, None);
         assert_eq!(entries[1].key, None);
+    }
+
+    #[test]
+    fn database_filename_matches_the_real_mac_name_and_the_windows_wiki_name() {
+        assert!(is_database_filename("database.xml"));
+        assert!(is_database_filename("Database.XML"));
+        assert!(is_database_filename("VirtualDJ Database.xml"));
+        assert!(is_database_filename("VirtualDJ Database LAPTOP-ABC123.xml"));
+        assert!(!is_database_filename("settings.xml"));
+        assert!(!is_database_filename("database.xml.bak"));
     }
 
     #[test]
