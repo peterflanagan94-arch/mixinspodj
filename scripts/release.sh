@@ -42,9 +42,22 @@ if git rev-parse "$TAG" >/dev/null 2>&1; then
 fi
 
 echo "==> Bumping version to $VERSION"
-sed -i '' -E "0,/\"version\": \"[0-9]+\.[0-9]+\.[0-9]+\"/s//\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
-sed -i '' -E "0,/\"version\": \"[0-9]+\.[0-9]+\.[0-9]+\"/s//\"version\": \"$VERSION\"/" package.json
-sed -i '' -E "0,/^version = \"[0-9]+\.[0-9]+\.[0-9]+\"/s//version = \"$VERSION\"/" src-tauri/Cargo.toml
+# (BSD sed on macOS can't do "first match only", so this uses python.)
+python3 - "$VERSION" <<'PY'
+import re, sys
+version = sys.argv[1]
+for path, pattern, template in [
+    ("src-tauri/tauri.conf.json", r'"version": "\d+\.\d+\.\d+"', f'"version": "{version}"'),
+    ("package.json", r'"version": "\d+\.\d+\.\d+"', f'"version": "{version}"'),
+    ("src-tauri/Cargo.toml", r'(?m)^version = "\d+\.\d+\.\d+"', f'version = "{version}"'),
+]:
+    text = open(path).read()
+    new, count = re.subn(pattern, template, text, count=1)
+    if count != 1:
+        sys.exit(f"Couldn't find the version in {path}")
+    open(path, "w").write(new)
+PY
+grep -q "\"version\": \"$VERSION\"" src-tauri/tauri.conf.json || { echo "Version bump didn't apply" >&2; exit 1; }
 
 echo "==> Running the test suite"
 cargo test --workspace --quiet
