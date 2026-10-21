@@ -67,7 +67,8 @@ cargo check --workspace --quiet
 
 echo "==> Committing the version bump"
 git add src-tauri/tauri.conf.json package.json src-tauri/Cargo.toml Cargo.lock
-git commit -m "Bump version to $VERSION"
+# (Nothing to commit when re-running after a failed build that already bumped.)
+git diff --cached --quiet || git commit -m "Bump version to $VERSION"
 
 # Updates are signed with this key; keep it safe and never commit it.
 KEY_FILE="${TAURI_SIGNING_PRIVATE_KEY_PATH:-$HOME/.tauri/mixinspodj.key}"
