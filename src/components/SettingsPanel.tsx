@@ -39,6 +39,25 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
   const [spotifyClientSecret, setSpotifyClientSecret] = useState("");
   const [savingSpotify, setSavingSpotify] = useState(false);
 
+  const [bugMessage, setBugMessage] = useState("");
+  const [bugEmail, setBugEmail] = useState("");
+  const [sendingBug, setSendingBug] = useState(false);
+  const [bugStatus, setBugStatus] = useState<string | null>(null);
+
+  async function sendBugReport() {
+    setSendingBug(true);
+    setBugStatus(null);
+    try {
+      await invoke("send_bug_report", { message: bugMessage, email: bugEmail || null });
+      setBugMessage("");
+      setBugStatus("Thanks — your report was sent.");
+    } catch (e) {
+      setBugStatus(String(e));
+    } finally {
+      setSendingBug(false);
+    }
+  }
+
   async function toggleSharePlays(enabled: boolean) {
     setSharePlays(enabled);
     try {
@@ -522,6 +541,35 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
             />
             Share my plays
           </label>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Report a problem</div>
+          <p className="hint">
+            Tell us what went wrong. Only your message, the email below (if you add one) and the
+            app version are sent — nothing from your library.
+          </p>
+          <textarea
+            className="panel-search-input"
+            rows={4}
+            placeholder="What happened?"
+            value={bugMessage}
+            onChange={(e) => setBugMessage(e.target.value)}
+          />
+          <input
+            className="panel-search-input"
+            type="email"
+            placeholder="Your email, if you'd like a reply (optional)"
+            value={bugEmail}
+            onChange={(e) => setBugEmail(e.target.value)}
+          />
+          <button
+            disabled={sendingBug || bugMessage.trim().length < 5}
+            onClick={() => void sendBugReport()}
+          >
+            {sendingBug ? "Sending…" : "Send report"}
+          </button>
+          {bugStatus && <p className="hint">{bugStatus}</p>}
         </div>
 
         <div className="settings-section">

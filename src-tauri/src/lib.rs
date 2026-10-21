@@ -5,6 +5,7 @@ mod ai_suggest;
 mod analysis;
 mod export;
 mod broadcast;
+mod bug_report;
 mod library_scan;
 mod play_sharing;
 mod plays;
@@ -111,6 +112,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             db_health_check,
+            bug_report::send_bug_report,
             library_scan::pick_music_folder,
             library_scan::scan_library_folder,
             tracks::list_tracks,
