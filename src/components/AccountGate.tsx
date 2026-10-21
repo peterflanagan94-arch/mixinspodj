@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 
 export type AccountState = {
   signed_in: boolean;
@@ -17,12 +19,75 @@ export type AccountState = {
 const SUPPORT = "support@studioonscreen.com";
 
 /**
+ * Looks for a newer version when the app opens and then once a day, and offers
+ * it in a strip across the top. It never installs or restarts by itself, so an
+ * update can't interrupt a set. It sits above every screen, including sign-in
+ * and "trial ended", so people who are locked out still get fixes.
+ */
+function UpdateBanner() {
+  const [update, setUpdate] = useState<Update | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const look = async () => {
+      try {
+        const found = await check();
+        if (!cancelled && found) setUpdate(found);
+      } catch {
+        // Offline, or no release yet: nothing to show, and the next check will try again.
+      }
+    };
+    void look();
+    const id = window.setInterval(() => void look(), 24 * 60 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  if (!update) return null;
+
+  async function install() {
+    setInstalling(true);
+    setFailed(false);
+    try {
+      await update!.downloadAndInstall();
+      await relaunch();
+    } catch {
+      setInstalling(false);
+      setFailed(true);
+    }
+  }
+
+  return (
+    <div className="update-banner">
+      Version {update.version} is ready.{" "}
+      <button disabled={installing} onClick={() => void install()}>
+        {installing ? "Updating…" : "Restart to update"}
+      </button>
+      {failed && " Couldn't install it. Try again, or download it from the website."}
+    </div>
+  );
+}
+
+/**
  * Sits in front of the whole app: sign in or create an account (14-day free
  * trial, no card), choose your own password after the emailed temporary one,
  * and subscribe when the trial ends. Once the account is allowed it renders
  * the app, with a slim banner while the trial runs.
  */
 export function AccountGate({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <UpdateBanner />
+      <AccountScreens>{children}</AccountScreens>
+    </>
+  );
+}
+
+function AccountScreens({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AccountState | null>(null);
   const refresh = useCallback(async () => {
     setState(await invoke<AccountState>("account_state"));

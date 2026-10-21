@@ -877,3 +877,17 @@ button:disabled {
   background: rgba(39, 193, 211, 0.12);
   color: #cdd5e0;
 }
+
+/* Update strip: shown above every screen when a newer version is ready */
+.update-banner {
+  text-align: center;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: rgba(39, 193, 211, 0.22);
+  color: #ffffff;
+}
+.update-banner button {
+  margin-left: 6px;
+  padding: 2px 10px;
+  font-size: 12px;
+}
