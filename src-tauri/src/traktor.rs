@@ -17,7 +17,7 @@ use tauri::{AppHandle, Manager};
 use walkdir::WalkDir;
 
 use crate::library_scan::{extract_track, is_audio_file, is_cloud_only};
-use crate::{settings, DbState};
+use crate::{platform, settings, DbState};
 
 /// The collection file's modified time at the last import, so an unchanged
 /// file is not parsed again on every watch tick.
@@ -55,10 +55,8 @@ pub fn find_collection(app: &AppHandle) -> Option<PathBuf> {
 }
 
 fn newest_default_collection() -> Option<PathBuf> {
-    let home = PathBuf::from(std::env::var_os("HOME")?);
-    ["Documents/Native Instruments", "Music/Native Instruments"]
-        .iter()
-        .map(|sub| home.join(sub))
+    platform::traktor_roots()
+        .into_iter()
         .flat_map(|root| {
             WalkDir::new(root)
                 .max_depth(3)
@@ -219,16 +217,12 @@ pub fn parse_collection(xml: &str) -> Vec<CollectionEntry> {
 }
 
 /// Turns Traktor's LOCATION (volume, folder and file, with ':' as the folder
-/// separator) into a POSIX path. The boot disk is "Macintosh" in Traktor.
+/// separator) into a real path for this operating system.
 fn location_to_path(location: &str) -> Option<String> {
     let file = attr(location, "FILE")?;
     let dir = attr(location, "DIR").unwrap_or_default().replace("/:", "/");
     let volume = attr(location, "VOLUME").unwrap_or_default();
-    let base = match volume.as_str() {
-        "" | "Macintosh" | "Macintosh HD" => String::new(),
-        other => format!("/Volumes/{other}"),
-    };
-    Some(format!("{base}{dir}{file}"))
+    Some(platform::native_traktor_path(&volume, &dir, &file))
 }
 
 /// A Traktor key as (pitch class 0=C..11=B, is_major). Traktor writes keys

@@ -9,6 +9,7 @@ mod broadcast;
 mod bug_report;
 mod library_scan;
 mod play_sharing;
+mod platform;
 mod plays;
 mod recommend;
 mod set_builder;

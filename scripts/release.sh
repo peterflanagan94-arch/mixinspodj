@@ -87,13 +87,13 @@ echo "==> Pushing to origin"
 git push origin "$BRANCH"
 
 if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
-  NOTES="Signed and notarized. Double-click the .dmg and drag MixInspo DJ to Applications. Works on Intel and Apple Silicon Macs."
+  NOTES="Signed and notarized. Double-click the .dmg and drag MixInspo DJ to Applications. Works on Intel and Apple Silicon Macs. The Windows installer is added a few minutes later."
 else
   NOTES="Not signed or notarized yet, so macOS will warn it can't check it for malware on first open.
 
 **To open it:** double-click the .dmg and drag MixInspo DJ to Applications. Try to open the app once, then go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**, and confirm. You only need to do this once.
 
-Works on Intel and Apple Silicon Macs."
+Works on Intel and Apple Silicon Macs. The Windows installer is added a few minutes later."
 fi
 
 echo "==> Creating GitHub release $TAG"
@@ -117,6 +117,11 @@ gh release create "$TAG" "$DMG_PATH" "$UPLOAD_TAR" "$LATEST_JSON" \
   --title "MixInspo DJ $TAG" \
   --target "$BRANCH" \
   --notes "$NOTES"
+
+echo "==> Starting the Windows build on GitHub (adds the installer to $TAG when it finishes)"
+if ! gh workflow run windows.yml -f tag="$TAG"; then
+  echo "Couldn't start the Windows build. Run it by hand: GitHub -> Actions -> Windows build, tag $TAG." >&2
+fi
 
 echo ""
 echo "==> Done. The landing page links to the latest release, so it needs no edit."

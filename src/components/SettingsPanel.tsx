@@ -651,9 +651,9 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
         </div>
 
         <div className="settings-section">
-          <div className="settings-section-label">Window & macOS behaviour</div>
+          <div className="settings-section-label">Window behaviour</div>
           <p className="hint">
-            Mini mode, menu-bar show/hide, launch at login, and remembering window position/size are
+            Mini mode, tray/menu-bar show/hide, launch at login, and remembering window position/size are
             not built yet — a dedicated milestone, not faked here.
           </p>
         </div>

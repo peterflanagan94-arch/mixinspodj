@@ -51,14 +51,10 @@ pub struct TraktorPlayDto {
 
 /// Every history file under the usual Traktor folders.
 fn history_files() -> Vec<PathBuf> {
-    let Some(home) = std::env::var_os("HOME") else {
-        return Vec::new();
-    };
-    let home = PathBuf::from(home);
-    ["Documents/Native Instruments", "Music/Native Instruments"]
-        .iter()
-        .flat_map(|sub| {
-            WalkDir::new(home.join(sub))
+    crate::platform::traktor_roots()
+        .into_iter()
+        .flat_map(|root| {
+            WalkDir::new(root)
                 .max_depth(4)
                 .into_iter()
                 .filter_map(Result::ok)
@@ -103,10 +99,7 @@ fn traktor_key_to_path(key: &str) -> String {
         None => ("", key),
     };
     let path = rest.replace("/:", "/");
-    match volume {
-        "" | "Macintosh" | "Macintosh HD" => format!("/{path}"),
-        other => format!("/Volumes/{other}/{path}"),
-    }
+    crate::platform::native_traktor_path(volume, "/", &path)
 }
 
 fn file_mtime(path: &Path) -> Option<i64> {

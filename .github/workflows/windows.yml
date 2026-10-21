@@ -1,0 +1,72 @@
+# Builds the Windows installer for a release that scripts/release.sh has already
+# published from a Mac, attaches it to that release, and adds Windows to the
+# release's latest.json so installed copies can update themselves.
+#
+# release.sh starts this for you. To run it by hand: Actions -> Windows build -> Run workflow, with the tag (e.g. v0.3.0).
+#
+# Needs one repository secret: TAURI_SIGNING_PRIVATE_KEY, the contents of ~/.tauri/mixinspodj.key
+# (the same update-signing key release.sh uses on the Mac). The key has no password.
+name: Windows build
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach to, e.g. v0.3.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+
+      - name: Build the installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: npm run tauri build -- --bundles nsis
+
+      - name: Attach the installer and add Windows to latest.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          SETUP=$(ls target/release/bundle/nsis/*-setup.exe | head -1)
+          SIG="$SETUP.sig"
+          test -f "$SIG"
+          NAME="MixInspo.DJ_windows_setup.exe"
+          cp "$SETUP" "$NAME"
+          cp "$SIG" "$NAME.sig"
+
+          gh release download "$TAG" --pattern latest.json --dir . --clobber
+          python3 - "$NAME" <<'PY'
+          import json, os, sys
+          name = sys.argv[1]
+          data = json.load(open("latest.json"))
+          data["platforms"]["windows-x86_64"] = {
+              "signature": open(name + ".sig").read().strip(),
+              "url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['TAG']}/{name}",
+          }
+          json.dump(data, open("latest.json", "w"), indent=2)
+          PY
+
+          gh release upload "$TAG" "$NAME" latest.json --clobber
