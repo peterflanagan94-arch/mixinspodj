@@ -2,7 +2,10 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window and the Library window it can open",
-  "windows": ["main", "library"],
+  "windows": [
+    "main",
+    "library"
+  ],
   "permissions": [
     "core:default",
     "opener:default",
@@ -10,6 +13,8 @@
     "core:window:allow-minimize",
     "core:window:allow-set-focus",
     "core:window:allow-set-size",
-    "core:webview:allow-create-webview-window"
+    "core:webview:allow-create-webview-window",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

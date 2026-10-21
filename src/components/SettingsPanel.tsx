@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import {
   AnalyzeProgress,
   AnalyzeSummary,
@@ -38,6 +40,29 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
   const [spotifyClientId, setSpotifyClientId] = useState("");
   const [spotifyClientSecret, setSpotifyClientSecret] = useState("");
   const [savingSpotify, setSavingSpotify] = useState(false);
+
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
+
+  async function checkForUpdate() {
+    setUpdating(true);
+    setUpdateStatus("Checking…");
+    try {
+      const update = await check();
+      if (!update) {
+        setUpdateStatus("You're on the latest version.");
+        return;
+      }
+      setUpdateStatus(`Downloading version ${update.version}…`);
+      await update.downloadAndInstall();
+      setUpdateStatus("Updated — restarting…");
+      await relaunch();
+    } catch (e) {
+      setUpdateStatus(`Could not check for updates: ${String(e)}`);
+    } finally {
+      setUpdating(false);
+    }
+  }
 
   const [bugMessage, setBugMessage] = useState("");
   const [bugEmail, setBugEmail] = useState("");
@@ -541,6 +566,15 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
             />
             Share my plays
           </label>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Updates</div>
+          <p className="hint">Checks GitHub for a newer version of MixInspo DJ and installs it.</p>
+          <button disabled={updating} onClick={() => void checkForUpdate()}>
+            Check for updates
+          </button>
+          {updateStatus && <p className="hint">{updateStatus}</p>}
         </div>
 
         <div className="settings-section">

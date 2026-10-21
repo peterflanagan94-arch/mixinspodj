@@ -56,9 +56,26 @@ echo "==> Committing the version bump"
 git add src-tauri/tauri.conf.json package.json src-tauri/Cargo.toml Cargo.lock
 git commit -m "Bump version to $VERSION"
 
-echo "==> Building the universal .dmg"
+# Updates are signed with this key; keep it safe and never commit it.
+KEY_FILE="${TAURI_SIGNING_PRIVATE_KEY_PATH:-$HOME/.tauri/mixinspodj.key}"
+if [[ ! -f "$KEY_FILE" ]]; then
+  echo "Updater signing key not found at $KEY_FILE" >&2
+  exit 1
+fi
+export TAURI_SIGNING_PRIVATE_KEY="$KEY_FILE"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+
+echo "==> Building the universal .dmg and update bundle"
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
-npm run tauri build -- --target universal-apple-darwin --bundles dmg
+npm run tauri build -- --target universal-apple-darwin --bundles app,dmg
+
+BUNDLE_DIR=target/universal-apple-darwin/release/bundle
+UPDATE_TAR=$(find "$BUNDLE_DIR/macos" -maxdepth 1 -name "*.app.tar.gz" | head -1)
+UPDATE_SIG="$UPDATE_TAR.sig"
+if [[ -z "$UPDATE_TAR" || ! -f "$UPDATE_SIG" ]]; then
+  echo "Couldn't find the signed update bundle under $BUNDLE_DIR/macos" >&2
+  exit 1
+fi
 
 DMG_PATH=$(find target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -name "*.dmg" | head -1)
 if [[ -z "$DMG_PATH" ]]; then
@@ -80,7 +97,23 @@ Works on Intel and Apple Silicon Macs."
 fi
 
 echo "==> Creating GitHub release $TAG"
-gh release create "$TAG" "$DMG_PATH" \
+# latest.json is what installed copies check; the tar.gz is a universal build, so both Mac architectures use it.
+TAR_NAME=$(basename "$UPDATE_TAR" | tr ' ' '.')
+LATEST_JSON="$(mktemp -d)/latest.json"
+UPDATE_URL="https://github.com/peterflanagan94-arch/mixinspodj/releases/download/$TAG/$TAR_NAME"
+VERSION="$VERSION" UPDATE_URL="$UPDATE_URL" SIG="$(cat "$UPDATE_SIG")" python3 - "$LATEST_JSON" <<'PY'
+import json, os, sys, datetime
+entry = {"signature": os.environ["SIG"], "url": os.environ["UPDATE_URL"]}
+json.dump({
+    "version": os.environ["VERSION"],
+    "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "platforms": {"darwin-aarch64": entry, "darwin-x86_64": entry},
+}, open(sys.argv[1], "w"), indent=2)
+PY
+UPLOAD_TAR="$(mktemp -d)/$TAR_NAME"
+cp "$UPDATE_TAR" "$UPLOAD_TAR"
+
+gh release create "$TAG" "$DMG_PATH" "$UPLOAD_TAR" "$LATEST_JSON" \
   --title "MixInspo DJ $TAG" \
   --target "$BRANCH" \
   --notes "$NOTES"
