@@ -38,6 +38,11 @@ pub struct AppSettings {
     pub spotify_client_id: Option<String>,
     #[serde(default)]
     pub spotify_client_secret: Option<String>,
+    /// The signed-in MixInspo account (see `account.rs`): session tokens and
+    /// the last licence the server gave, so the app keeps working offline
+    /// for a short grace period.
+    #[serde(default)]
+    pub account: Option<crate::account::StoredAccount>,
 }
 
 impl Default for AppSettings {
@@ -49,6 +54,7 @@ impl Default for AppSettings {
             startup_view: default_startup_view(),
             spotify_client_id: None,
             spotify_client_secret: None,
+            account: None,
         }
     }
 }

@@ -9,6 +9,9 @@ const BROADCASTING_HINT =
   "Address 127.0.0.1, Port 8765, Mount path /mixinspo, Password mixinspo. " +
   "Then turn Broadcasting on (the antenna icon).";
 
+// VirtualDJ is hidden for launch while the app is Traktor-first; flip to show it again.
+const SHOW_VIRTUALDJ = false;
+
 const VIRTUALDJ_HINT =
   "No live detection yet. VirtualDJ's Network Control Plugin needs a Pro license to build " +
   "and test against, which isn't available right now. Settings → VirtualDJ (experimental) " +
@@ -46,10 +49,12 @@ export function StatusBar({ traktorStatus }: Props) {
         <span className={`traktor-dot ${traktor.className}`} />
         TRAKTOR
       </div>
-      <div className="traktor-status" title={VIRTUALDJ_HINT}>
-        <span className="traktor-dot traktor-dot-unavailable" />
-        VIRTUALDJ
-      </div>
+      {SHOW_VIRTUALDJ && (
+        <div className="traktor-status" title={VIRTUALDJ_HINT}>
+          <span className="traktor-dot traktor-dot-unavailable" />
+          VIRTUALDJ
+        </div>
+      )}
     </div>
   );
 }

@@ -22,6 +22,9 @@ type Props = {
   traktorStatus: TraktorStatus | null;
 };
 
+// VirtualDJ import is hidden for launch while the app is Traktor-first; flip to show it again.
+const SHOW_VIRTUALDJ = false;
+
 export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }: Props) {
   const [folder, setFolder] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
@@ -40,6 +43,16 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
   const [spotifyClientId, setSpotifyClientId] = useState("");
   const [spotifyClientSecret, setSpotifyClientSecret] = useState("");
   const [savingSpotify, setSavingSpotify] = useState(false);
+
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  useEffect(() => {
+    invoke<{ email: string | null }>("account_state").then((a) => setAccountEmail(a.email)).catch(() => {});
+  }, []);
+
+  async function signOut() {
+    await invoke("account_logout");
+    window.location.reload();
+  }
 
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -450,38 +463,40 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
           </p>
         </div>
 
-        <div className="settings-section">
-          <div className="settings-section-label">VirtualDJ (experimental)</div>
-          <p className="hint">
-            BPM and key import from VirtualDJ's own database file — built from community
-            documentation, not tested against a real VirtualDJ install. There's no live
-            now-playing detection for VirtualDJ yet, only this import, and it only runs when you
-            press Import below, never automatically.
-          </p>
-          <p className="hint">
-            Database:{" "}
-            <strong>{virtualdjDatabase ?? "none found"}</strong>
-          </p>
-          <button type="button" onClick={() => void chooseVirtualdjDatabase()}>
-            Choose VirtualDJ database…
-          </button>
-          {virtualdjDatabase && (
-            <button type="button" disabled={importingVdj} onClick={() => void importVirtualdjDatabase()}>
-              {importingVdj ? "Importing…" : "Import"}
-            </button>
-          )}
-          {virtualdjImport && (
+        {SHOW_VIRTUALDJ && (
+          <div className="settings-section">
+            <div className="settings-section-label">VirtualDJ (experimental)</div>
             <p className="hint">
-              Found {virtualdjImport.entries} tracks in the database. Applied BPM/key to{" "}
-              {virtualdjImport.tempo_applied}
-              {virtualdjImport.indexed > 0 ? `, added ${virtualdjImport.indexed} new files` : ""}.{" "}
-              {virtualdjImport.missing_files > 0 &&
-                `${virtualdjImport.missing_files} entries pointed at files not on this Mac.`}{" "}
-              If this looks wrong — wrong BPMs, or far fewer matches than you expected — tell
-              Peter; it means the unverified parts of this parser need fixing against your file.
+              BPM and key import from VirtualDJ's own database file — built from community
+              documentation, not tested against a real VirtualDJ install. There's no live
+              now-playing detection for VirtualDJ yet, only this import, and it only runs when you
+              press Import below, never automatically.
             </p>
-          )}
-        </div>
+            <p className="hint">
+              Database:{" "}
+              <strong>{virtualdjDatabase ?? "none found"}</strong>
+            </p>
+            <button type="button" onClick={() => void chooseVirtualdjDatabase()}>
+              Choose VirtualDJ database…
+            </button>
+            {virtualdjDatabase && (
+              <button type="button" disabled={importingVdj} onClick={() => void importVirtualdjDatabase()}>
+                {importingVdj ? "Importing…" : "Import"}
+              </button>
+            )}
+            {virtualdjImport && (
+              <p className="hint">
+                Found {virtualdjImport.entries} tracks in the database. Applied BPM/key to{" "}
+                {virtualdjImport.tempo_applied}
+                {virtualdjImport.indexed > 0 ? `, added ${virtualdjImport.indexed} new files` : ""}.{" "}
+                {virtualdjImport.missing_files > 0 &&
+                  `${virtualdjImport.missing_files} entries pointed at files not on this Mac.`}{" "}
+                If this looks wrong — wrong BPMs, or far fewer matches than you expected — tell
+                Peter; it means the unverified parts of this parser need fixing against your file.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="settings-section">
           <div className="settings-section-label">AI Suggestions</div>
@@ -566,6 +581,15 @@ export function SettingsPanel({ open, onClose, onLibraryChanged, traktorStatus }
             />
             Share my plays
           </label>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Account</div>
+          <p className="hint">
+            {accountEmail ? `Signed in as ${accountEmail}.` : "Signed in."} Cancel any time from your Stripe receipt email,
+            or email support@studioonscreen.com.
+          </p>
+          <button onClick={() => void signOut()}>Sign out</button>
         </div>
 
         <div className="settings-section">

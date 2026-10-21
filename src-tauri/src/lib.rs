@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use tauri::Manager;
 
+mod account;
 mod ai_suggest;
 mod analysis;
 mod export;
@@ -114,6 +115,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             db_health_check,
+            account::account_signup,
+            account::account_login,
+            account::account_change_password,
+            account::account_logout,
+            account::account_state,
             bug_report::send_bug_report,
             library_scan::pick_music_folder,
             library_scan::scan_library_folder,

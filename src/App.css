@@ -848,3 +848,32 @@ button:disabled {
   color: var(--text-primary);
   cursor: pointer;
 }
+
+/* Account gate: sign-in, password, subscribe screens and the trial banner */
+.gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 32px;
+  min-height: 100vh;
+}
+.gate-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 300px;
+}
+.gate-error {
+  color: #ff6b6b;
+}
+.gate-banner {
+  text-align: center;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: rgba(39, 193, 211, 0.12);
+  color: #cdd5e0;
+}
