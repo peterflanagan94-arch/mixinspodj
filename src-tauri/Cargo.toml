@@ -1,6 +1,6 @@
 [package]
 name = "mixinspodj"
-version = "0.3.1"
+version = "0.3.2"
 description = "MixInspo DJ — a DJ companion app"
 authors = ["you"]
 edition = "2021"
