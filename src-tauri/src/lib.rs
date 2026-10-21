@@ -117,6 +117,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             db_health_check,
             account::account_signup,
+            account::account_forgot_password,
             account::account_login,
             account::account_change_password,
             account::account_logout,

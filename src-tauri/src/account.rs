@@ -131,6 +131,23 @@ pub async fn account_signup(email: String, name: Option<String>) -> Result<(), S
     if status == 200 { Ok(()) } else { Err(error_message(&body)) }
 }
 
+/// Emails a new temporary password to the address if it has an account. The
+/// reply is the same either way, so it can't be used to find out who has one.
+#[tauri::command]
+pub async fn account_forgot_password(email: String) -> Result<(), String> {
+    let response = reqwest::Client::new()
+        .post("https://www.studioonscreen.com/api/forgot-password")
+        .json(&json!({ "email": email }))
+        .send()
+        .await
+        .map_err(|_| "Can't reach MixInspo right now. Check your internet connection.".to_string())?;
+    if response.status().is_success() {
+        return Ok(());
+    }
+    let body: Value = response.json().await.unwrap_or_default();
+    Err(error_message(&body))
+}
+
 #[tauri::command]
 pub async fn account_login(app: AppHandle, email: String, password: String) -> Result<AccountState, String> {
     let (status, body) = post("login", json!({ "email": email, "password": password }), None).await?;

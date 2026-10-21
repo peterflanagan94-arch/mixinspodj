@@ -66,6 +66,25 @@ function SignIn({ onDone }: { onDone: (s: AccountState) => void }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  async function forgotPassword() {
+    if (!email.trim()) {
+      setError("Enter your email above first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await invoke("account_forgot_password", { email });
+      setPassword("");
+      setMessage("If that email has an account, we've sent a temporary password. Sign in with it, then choose your own.");
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -77,8 +96,8 @@ function SignIn({ onDone }: { onDone: (s: AccountState) => void }) {
         setMode("signin");
         setPassword("");
         setMessage(
-          "Check your email for a temporary password, then sign in below. " +
-            "If you already have a Studio On Screen account, use your existing password instead.",
+          "If this email is new, we've sent a temporary password: sign in below with it. " +
+            "No email? You may already have a Studio On Screen account. Sign in with that password, or tap Forgot password.",
         );
       } else {
         onDone(await invoke<AccountState>("account_login", { email, password }));
@@ -111,6 +130,11 @@ function SignIn({ onDone }: { onDone: (s: AccountState) => void }) {
       </form>
       {message && <p className="hint">{message}</p>}
       {error && <p className="hint gate-error">{error}</p>}
+      {mode === "signin" && (
+        <p className="hint">
+          <a href="#" onClick={(e) => { e.preventDefault(); void forgotPassword(); }}>Forgot password?</a>
+        </p>
+      )}
       <p className="hint">
         <a href="#" onClick={(e) => { e.preventDefault(); setMode(mode === "create" ? "signin" : "create"); setError(null); }}>
           {mode === "create" ? "I already have an account" : "New here? Start a free trial"}
